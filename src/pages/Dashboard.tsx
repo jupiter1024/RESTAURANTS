@@ -4,8 +4,6 @@ import type { Restaurant, Menu, Order, MenuCategory, MenuItem } from '../db/mock
 import { useLanguage } from '../utils/translate';
 import { TemplateWrapper } from '../templates/TemplateWrapper';
 import { 
-  Sparkles, 
-  Store, 
   Menu as MenuIcon, 
   Palette, 
   ShoppingBag, 
@@ -20,7 +18,11 @@ import {
   Download,
   Layers,
   Building,
-  RefreshCw
+  RefreshCw,
+  LayoutDashboard,
+  Globe,
+  UtensilsCrossed,
+  TrendingUp
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -63,7 +65,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   if (!restaurant || !menu) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white text-slate-900">
+      <div className="min-h-screen flex items-center justify-center bg-white text-zinc-900">
         <RefreshProgress />
       </div>
     );
@@ -84,63 +86,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
     setPublishSuccessMsg(t('publishSuccess'));
     reloadData();
     setTimeout(() => setPublishSuccessMsg(''), 3000);
-  };
-
-  // AI color palette extraction from Logo
-  const handleExtractColors = () => {
-    if (!restaurant.logoUrl) return;
-    
-    const img = new Image();
-    img.crossOrigin = 'Anonymous';
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.drawImage(img, 0, 0);
-      try {
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-        const colorCounts: Record<string, number> = {};
-        for (let i = 0; i < imageData.length; i += 40) {
-          const r = imageData[i];
-          const g = imageData[i+1];
-          const b = imageData[i+2];
-          const a = imageData[i+3];
-          if (a < 128) continue;
-          if (r > 240 && g > 240 && b > 240) continue;
-          if (r < 15 && g < 15 && b < 15) continue;
-          const rgb = `${r},${g},${b}`;
-          colorCounts[rgb] = (colorCounts[rgb] || 0) + 1;
-        }
-        const sorted = Object.entries(colorCounts).sort((a, b) => b[1] - a[1]);
-        if (sorted.length > 0) {
-          const rgb1 = sorted[0][0].split(',').map(Number);
-          const primHex = '#' + rgb1.map(x => x.toString(16).padStart(2, '0')).join('');
-          
-          let secHex = '#1f2937';
-          if (sorted.length > 1) {
-            const rgb2 = sorted[1][0].split(',').map(Number);
-            secHex = '#' + rgb2.map(x => x.toString(16).padStart(2, '0')).join('');
-          }
-          
-          db.updateRestaurant(restaurantId, {
-            branding: {
-              ...restaurant.branding,
-              primaryColor: primHex,
-              buttonColor: primHex,
-              secondaryColor: secHex
-            }
-          });
-          
-          reloadData();
-          alert(t('aiColorSuccess'));
-        }
-      } catch (e) {
-        console.error('Failed to parse colors via canvas', e);
-      }
-    };
-    img.src = restaurant.logoUrl;
   };
 
   // Menu Category CRUD
@@ -265,60 +210,62 @@ export const Dashboard: React.FC<DashboardProps> = ({
     reloadData();
   };
 
+  const navItems = [
+    { id: 'overview', icon: <LayoutDashboard className="w-4 h-4" />, label: t('dashOverview') },
+    { id: 'menu', icon: <MenuIcon className="w-4 h-4" />, label: t('dashMenu') },
+    { id: 'design', icon: <Layers className="w-4 h-4" />, label: t('dashDesign') },
+    { id: 'branding', icon: <Palette className="w-4 h-4" />, label: t('dashBranding') },
+    { id: 'orders', icon: <ShoppingBag className="w-4 h-4" />, label: t('dashOrders'), badge: pendingOrdersCount > 0 ? pendingOrdersCount : null },
+    { id: 'info', icon: <Building className="w-4 h-4" />, label: t('dashInfo') },
+    { id: 'settings', icon: <SettingsIcon className="w-4 h-4" />, label: t('dashSettings') },
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col md:flex-row relative">
-      {/* Top Floating Language & Dashboard Controls */}
+    <div className="min-h-screen bg-zinc-50 text-zinc-900 flex flex-col md:flex-row relative">
+      {/* Top Floating Controls */}
       <div className="absolute top-4 right-4 z-40 flex items-center gap-2">
-        {/* Languages Switcher */}
         <button
           onClick={() => setLanguage(language === 'en' ? 'ar' : 'en')}
-          className="text-xs bg-white text-slate-700 hover:text-blue-600 px-3 py-1.5 rounded-xl border border-slate-300 font-bold transition flex items-center gap-1 shadow-2xs"
+          className="text-xs bg-white text-zinc-600 hover:text-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 font-medium transition flex items-center gap-1 shadow-sm"
         >
           <Languages className="w-3.5 h-3.5" />
           <span>{language === 'en' ? 'العربية' : 'English'}</span>
         </button>
 
-        {/* View live site */}
         <a 
           href={siteUrl} 
           target="_blank" 
           rel="noreferrer"
-          className="text-xs bg-blue-600 hover:bg-blue-700 text-slate-900 px-3.5 py-1.5 rounded-xl font-bold transition flex items-center gap-1 shadow-md shadow-blue-500/20"
+          className="text-xs bg-zinc-900 hover:bg-zinc-800 text-white px-3.5 py-1.5 rounded-lg font-medium transition flex items-center gap-1 shadow-sm"
         >
-          <Eye className="w-3.5 h-3.5 text-slate-900" />
+          <Eye className="w-3.5 h-3.5" />
           <span>{t('liveSite')}</span>
         </a>
       </div>
 
       {/* Side Navigation */}
-      <aside className="w-full md:w-64 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 p-6 shadow-2xs">
+      <aside className="w-full md:w-64 bg-white border-r border-zinc-200 flex flex-col justify-between shrink-0 p-6 shadow-sm">
         <div>
           {/* Logo Branding */}
           <div className="flex items-center gap-2.5 mb-8">
-            <div className="bg-blue-600 p-2 rounded-xl text-slate-900 shadow-md shadow-blue-500/20">
-              <Sparkles className="w-5 h-5 text-slate-900" />
+            <div className="bg-zinc-900 rounded-lg w-8 h-8 flex items-center justify-center shrink-0">
+              <svg viewBox="0 0 24 24" className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M4 10h16M4 14h16M8 6v12M16 6v12" strokeLinecap="round" />
+              </svg>
             </div>
             <div>
-              <span className="font-extrabold text-md tracking-tight text-slate-900 block">
+              <span className="font-semibold text-md tracking-tight text-zinc-900 block">
                 {tText(restaurant.name)}
               </span>
-              <span className="text-[9px] font-extrabold text-blue-600 uppercase tracking-widest block">
-                SaaS Dashboard
+              <span className="text-[9px] font-medium text-zinc-400 uppercase tracking-widest block">
+                BistroFlow Dashboard
               </span>
             </div>
           </div>
 
           {/* Nav list */}
           <nav className="space-y-1">
-            {[
-              { id: 'overview', icon: <Store className="w-4 h-4" />, label: t('dashOverview') },
-              { id: 'menu', icon: <MenuIcon className="w-4 h-4" />, label: t('dashMenu') },
-              { id: 'design', icon: <Layers className="w-4 h-4" />, label: t('dashDesign') },
-              { id: 'branding', icon: <Palette className="w-4 h-4" />, label: t('dashBranding') },
-              { id: 'orders', icon: <ShoppingBag className="w-4 h-4" />, label: t('dashOrders'), badge: pendingOrdersCount > 0 ? pendingOrdersCount : null },
-              { id: 'info', icon: <Building className="w-4 h-4" />, label: t('dashInfo') },
-              { id: 'settings', icon: <SettingsIcon className="w-4 h-4" />, label: t('dashSettings') },
-            ].map((tab) => {
+            {navItems.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
                 <button
@@ -327,18 +274,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     setActiveTab(tab.id as any);
                     setActiveOrderDetails(null);
                   }}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition ${
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium transition ${
                     isActive 
-                      ? 'bg-blue-600 text-slate-900 shadow-md shadow-blue-500/20' 
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                      ? 'bg-zinc-900 text-white shadow-sm' 
+                      : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'
                   }`}
                 >
-                  <span className="flex items-center gap-2">
+                  <span className="flex items-center gap-2.5">
                     {tab.icon}
                     <span>{tab.label}</span>
                   </span>
                   {tab.badge && (
-                    <span className="bg-red-500 text-slate-900 text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                    <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
                       {tab.badge}
                     </span>
                   )}
@@ -349,18 +296,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* Dashboard bottom */}
-        <div className="pt-6 border-t border-slate-200 mt-8 space-y-4">
+        <div className="pt-6 border-t border-zinc-200 mt-8 space-y-4">
           {/* Status quick toggle */}
-          <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200">
+          <div className="flex items-center justify-between bg-zinc-50 p-3 rounded-lg border border-zinc-200">
             <div>
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Status</span>
-              <span className={`text-[10px] font-bold ${restaurant.published ? 'text-emerald-600' : 'text-amber-600'}`}>
+              <span className="text-[9px] font-medium text-zinc-400 uppercase tracking-wider block">Status</span>
+              <span className={`text-[10px] font-medium ${restaurant.published ? 'text-emerald-600' : 'text-amber-600'}`}>
                 {restaurant.published ? t('liveSite') : t('draftSite')}
               </span>
             </div>
             <button 
               onClick={handlePublish}
-              className={`text-[9px] font-bold px-2.5 py-1 rounded-lg transition text-slate-900 ${restaurant.published ? 'bg-slate-700 hover:bg-slate-800' : 'bg-blue-600 hover:bg-blue-700'}`}
+              className={`text-[9px] font-medium px-2.5 py-1 rounded-lg transition text-white ${restaurant.published ? 'bg-zinc-700 hover:bg-zinc-800' : 'bg-zinc-900 hover:bg-zinc-800'}`}
             >
               {restaurant.published ? 'Unpublish' : 'Publish'}
             </button>
@@ -368,7 +315,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
           <button 
             onClick={onLogout}
-            className="w-full flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs text-slate-500 hover:text-red-600 font-semibold transition"
+            className="w-full flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm text-zinc-500 hover:text-red-600 font-medium transition"
           >
             <LogOut className="w-4 h-4" />
             <span>{t('logoutBtn')}</span>
@@ -377,10 +324,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
       </aside>
 
       {/* Main Content Workspace */}
-      <main className="flex-1 p-6 md:p-10 max-h-screen overflow-y-auto bg-slate-50">
+      <main className="flex-1 p-6 md:p-10 max-h-screen overflow-y-auto bg-zinc-50">
         {/* Publish Alert banner */}
         {publishSuccessMsg && (
-          <div className="mb-6 bg-emerald-50 border border-emerald-200 p-3 rounded-xl text-xs font-bold text-emerald-600 flex items-center gap-2">
+          <div className="mb-6 bg-emerald-50 border border-emerald-200 p-3 rounded-lg text-sm font-medium text-emerald-600 flex items-center gap-2">
             <Check className="w-4 h-4 text-emerald-600" />
             {publishSuccessMsg}
           </div>
@@ -393,55 +340,99 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div className="animate-fade-in space-y-8">
             <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
               <div>
-                <h2 className="text-xl font-extrabold text-slate-900">
+                <h2 className="text-xl font-bold text-zinc-900">
                   {t('welcomeOwner')} {tText(restaurant.name)}
                 </h2>
-                <p className="text-xs text-slate-500 mt-0.5">Here is how your restaurant website is doing today.</p>
+                <p className="text-sm text-zinc-500 mt-0.5">Here is how your restaurant website is doing today.</p>
               </div>
-              <span className="text-xs bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-300 text-slate-600 font-mono">
+              <span className="text-xs bg-white px-3 py-1.5 rounded-lg border border-zinc-200 text-zinc-600 font-mono">
                 📅 {new Date().toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}
               </span>
             </div>
 
             {/* Metrics cards grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              <div className="glass p-5 rounded-2xl border border-slate-200">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Total Items</span>
-                <div className="text-2xl font-black text-slate-900">{totalItemsCount}</div>
-                <span className="text-[9px] text-slate-500">across menu categories</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">Website Status</span>
+                  <Globe className="w-4 h-4 text-zinc-300" />
+                </div>
+                <div className={`text-2xl font-bold ${restaurant.published ? 'text-emerald-600' : 'text-amber-600'}`}>
+                  {restaurant.published ? 'Live' : 'Draft'}
+                </div>
+                <span className="text-[10px] text-zinc-400">your restaurant website</span>
               </div>
-              <div className="glass p-5 rounded-2xl border border-slate-200">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Pending Orders</span>
-                <div className="text-2xl font-black text-amber-600">{pendingOrdersCount}</div>
-                <span className="text-[9px] text-slate-500">awaiting your kitchen response</span>
+              <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">Orders Today</span>
+                  <ShoppingBag className="w-4 h-4 text-zinc-300" />
+                </div>
+                <div className="text-2xl font-bold text-zinc-900">{pendingOrdersCount}</div>
+                <span className="text-[10px] text-zinc-400">awaiting your kitchen</span>
               </div>
-              <div className="glass p-5 rounded-2xl border border-slate-200">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Completed Sales</span>
-                <div className="text-2xl font-black text-emerald-600">{totalSales} {t('currency')}</div>
-                <span className="text-[9px] text-slate-500">commission-free revenue</span>
+              <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">Menu Items</span>
+                  <UtensilsCrossed className="w-4 h-4 text-zinc-300" />
+                </div>
+                <div className="text-2xl font-bold text-zinc-900">{totalItemsCount}</div>
+                <span className="text-[10px] text-zinc-400">across {menu.categories.length} categories</span>
               </div>
-              <div className="glass p-5 rounded-2xl border border-slate-200">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Billing Plan</span>
-                <div className="text-2xl font-black text-blue-600 uppercase">{restaurant.pricingPlan}</div>
-                <span className="text-[9px] text-slate-500">billing features config</span>
+              <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">Completed Sales</span>
+                  <TrendingUp className="w-4 h-4 text-zinc-300" />
+                </div>
+                <div className="text-2xl font-bold text-emerald-600">{totalSales} {t('currency')}</div>
+                <span className="text-[10px] text-zinc-400">commission-free revenue</span>
               </div>
             </div>
 
-            {/* QR Code and Quick Orders */}
+            {/* Quick Actions */}
+            <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-sm">
+              <h3 className="text-sm font-semibold text-zinc-900 mb-4">Quick Actions</h3>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => { setActiveTab('menu'); setEditingItem({ categoryId: menu.categories[0]?.id || '', item: { id: '', name: { en: '', ar: '' }, description: { en: '', ar: '' }, price: 100, imageUrl: '', isAvailable: true, isHidden: false, variants: [], addons: [], order: 1 } }); }}
+                  className="btn-primary py-2 px-4 rounded-lg text-sm flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Food</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('design')}
+                  className="btn-secondary py-2 px-4 rounded-lg text-sm flex items-center gap-1.5"
+                >
+                  <Layers className="w-4 h-4" />
+                  <span>Edit Website</span>
+                </button>
+                <a
+                  href={siteUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-secondary py-2 px-4 rounded-lg text-sm flex items-center gap-1.5"
+                >
+                  <Eye className="w-4 h-4" />
+                  <span>View Website</span>
+                </a>
+              </div>
+            </div>
+
+            {/* Recent Orders and QR */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Recent Orders table */}
-              <div className="lg:col-span-8 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+              <div className="lg:col-span-8 bg-white p-6 rounded-xl border border-zinc-200 shadow-sm flex flex-col justify-between">
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">{t('recentOrders')}</h3>
+                  <h3 className="text-sm font-semibold text-zinc-900 mb-4 flex items-center gap-2">{t('recentOrders')}</h3>
                   {orders.length === 0 ? (
-                    <div className="text-center py-12 text-slate-400 text-xs italic">
+                    <div className="text-center py-12 text-zinc-400 text-sm italic">
                       {t('noOrders')}
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
-                      <table className="text-xs text-slate-600">
+                      <table className="text-sm text-zinc-600">
                         <thead>
-                          <tr className="text-slate-400">
+                          <tr className="text-zinc-400">
                             <th>{t('orderId')}</th>
                             <th>{t('customer')}</th>
                             <th>{t('orderTypeLabel')}</th>
@@ -451,13 +442,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         </thead>
                         <tbody>
                           {orders.slice(0, 5).map((ord) => (
-                            <tr key={ord.id} className="hover:bg-slate-100/10 cursor-pointer" onClick={() => { setActiveTab('orders'); setActiveOrderDetails(ord); }}>
-                              <td className="font-mono font-bold text-blue-600">{ord.id}</td>
+                            <tr key={ord.id} className="hover:bg-zinc-50 cursor-pointer" onClick={() => { setActiveTab('orders'); setActiveOrderDetails(ord); }}>
+                              <td className="font-mono font-semibold text-zinc-900">{ord.id}</td>
                               <td>{ord.customerName}</td>
                               <td>{stText(ord.orderType)}</td>
-                              <td className="font-bold">{ord.totalPrice} {t('currency')}</td>
+                              <td className="font-semibold">{ord.totalPrice} {t('currency')}</td>
                               <td>
-                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
                                   ord.status === 'pending' ? 'bg-amber-50 text-amber-600' :
                                   ord.status === 'preparing' ? 'bg-blue-50 text-blue-600' :
                                   ord.status === 'completed' ? 'bg-emerald-50 text-emerald-600' :
@@ -477,7 +468,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 {orders.length > 5 && (
                   <button 
                     onClick={() => setActiveTab('orders')}
-                    className="text-xs text-blue-600 hover:text-blue-300 font-semibold text-center mt-4 w-full"
+                    className="text-sm text-zinc-900 hover:text-zinc-700 font-medium text-center mt-4 w-full"
                   >
                     View All Orders →
                   </button>
@@ -485,14 +476,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
 
               {/* QR Code generator */}
-              <div className="lg:col-span-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs text-center flex flex-col items-center justify-center">
-                <h3 className="text-xs font-bold text-slate-900 mb-2">{t('qrCodeTitle')}</h3>
-                <p className="text-[10px] text-slate-500 mb-6 leading-relaxed max-w-xs">{t('qrCodeDesc')}</p>
+              <div className="lg:col-span-4 bg-white p-6 rounded-xl border border-zinc-200 shadow-sm text-center flex flex-col items-center justify-center">
+                <h3 className="text-sm font-semibold text-zinc-900 mb-2">{t('qrCodeTitle')}</h3>
+                <p className="text-xs text-zinc-500 mb-6 leading-relaxed max-w-xs">{t('qrCodeDesc')}</p>
                 
                 <img 
                   src={qrCodeUrl} 
                   alt="QR Menu link" 
-                  className="w-40 h-40 bg-white p-2 rounded-2xl shadow-lg mb-6 border border-slate-200"
+                  className="w-40 h-40 bg-white p-2 rounded-xl shadow-sm mb-6 border border-zinc-200"
                 />
 
                 <a 
@@ -500,7 +491,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   download="website_qr_code.png"
                   target="_blank" 
                   rel="noreferrer"
-                  className="btn-secondary py-2 px-4 rounded-xl text-[10px] flex items-center gap-1.5 w-full justify-center"
+                  className="btn-secondary py-2 px-4 rounded-lg text-xs flex items-center gap-1.5 w-full justify-center"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>{t('downloadQr')}</span>
@@ -517,44 +508,44 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div className="animate-fade-in space-y-6">
             <div className="flex justify-between items-center">
               <div>
-                <h2 className="text-xl font-extrabold text-slate-900">{t('dashMenu')}</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Manage your categories and food items. Drag-and-drop order reordering is structured in arrays.</p>
+                <h2 className="text-xl font-bold text-zinc-900">{t('dashMenu')}</h2>
+                <p className="text-sm text-zinc-500 mt-0.5">Manage the food and drinks displayed on your restaurant website.</p>
               </div>
               <button
                 onClick={() => setEditingCategory({ id: '', name: { en: '', ar: '' }, order: menu.categories.length + 1, items: [] })}
-                className="btn-primary py-2 px-4 rounded-xl text-xs flex items-center gap-1"
+                className="btn-primary py-2 px-4 rounded-lg text-sm flex items-center gap-1"
               >
-                <Plus className="w-4 h-4 text-slate-900" />
+                <Plus className="w-4 h-4" />
                 <span>{t('addCategory')}</span>
               </button>
             </div>
 
             {/* List categories */}
             {menu.categories.length === 0 ? (
-              <div className="bg-white p-12 rounded-2xl border border-slate-200 shadow-xs text-center text-slate-500 text-xs italic">
+              <div className="bg-white p-12 rounded-xl border border-zinc-200 shadow-sm text-center text-zinc-500 text-sm">
                 No categories listed yet. Create a category to start adding dishes.
               </div>
             ) : (
               <div className="space-y-6">
                 {menu.categories.map((cat) => (
-                  <div key={cat.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200 pb-4 mb-4 gap-4">
+                  <div key={cat.id} className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-zinc-100 pb-4 mb-4 gap-4">
                       <div>
-                        <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                          <span className="bg-slate-100 text-slate-500 text-[10px] px-2 py-0.5 rounded">
+                        <h3 className="text-sm font-semibold text-zinc-900 flex items-center gap-2">
+                          <span className="bg-zinc-100 text-zinc-500 text-[10px] px-2 py-0.5 rounded">
                             Order {cat.order}
                           </span>
                           {tText(cat.name)}
                         </h3>
-                        <p className="text-[10px] text-slate-500 font-mono mt-0.5">
-                          ID: {cat.id} | Items: {cat.items.length}
+                        <p className="text-xs text-zinc-400 mt-0.5">
+                          {cat.items.length} items
                         </p>
                       </div>
 
                       <div className="flex items-center gap-2 w-full sm:w-auto">
                         <button
                           onClick={() => setEditingCategory(cat)}
-                          className="bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5"
+                          className="bg-zinc-100 hover:bg-zinc-200 text-zinc-600 text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5"
                         >
                           <Edit className="w-3.5 h-3.5" />
                           <span>Rename</span>
@@ -584,7 +575,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           })}
                           className="btn-primary py-1.5 px-3 rounded-lg text-xs flex items-center gap-1.5 ml-auto sm:ml-0"
                         >
-                          <Plus className="w-3.5 h-3.5 text-slate-900" />
+                          <Plus className="w-3.5 h-3.5" />
                           <span>{t('addItem')}</span>
                         </button>
                       </div>
@@ -592,31 +583,31 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
                     {/* Category Items */}
                     {cat.items.length === 0 ? (
-                      <p className="text-xs text-slate-400 italic py-4">No dishes added to this category yet.</p>
+                      <p className="text-sm text-zinc-400 italic py-4">No dishes added to this category yet.</p>
                     ) : (
                       <div className="grid grid-cards">
                         {cat.items.map((item) => (
                           <div 
                             key={item.id} 
-                            className={`bg-slate-50 p-4 border rounded-2xl flex flex-col justify-between ${
-                              item.isHidden ? 'border-dashed border-slate-200 opacity-60' : 'border-slate-200'
+                            className={`bg-zinc-50 p-4 border rounded-xl flex flex-col justify-between ${
+                              item.isHidden ? 'border-dashed border-zinc-200 opacity-60' : 'border-zinc-200'
                             }`}
                           >
                             <div className="flex gap-3">
                               {item.imageUrl && (
-                                <img src={item.imageUrl} alt={tText(item.name)} className="w-14 h-14 object-cover rounded-lg shrink-0 border border-slate-200" />
+                                <img src={item.imageUrl} alt={tText(item.name)} className="w-14 h-14 object-cover rounded-lg shrink-0 border border-zinc-200" />
                               )}
                               <div className="flex-1">
-                                <h4 className="font-bold text-xs text-slate-900">{tText(item.name)}</h4>
-                                <p className="text-[10px] text-slate-500 mt-1 line-clamp-2">{tText(item.description)}</p>
+                                <h4 className="font-semibold text-sm text-zinc-900">{tText(item.name)}</h4>
+                                <p className="text-xs text-zinc-500 mt-1 line-clamp-2">{tText(item.description)}</p>
                                 
                                 <div className="flex items-center gap-2 mt-2 flex-wrap">
                                   {/* Quick Inline Price Editor */}
-                                  <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-0.5">
+                                  <div className="flex items-center bg-white border border-zinc-200 rounded-lg p-0.5">
                                     <button
                                       type="button"
                                       onClick={() => quickSavePrice(cat.id, item.id, item.price - 5)}
-                                      className="text-slate-500 hover:text-slate-900 px-1.5 py-0.5 text-[10px] font-extrabold hover:bg-slate-100 rounded"
+                                      className="text-zinc-500 hover:text-zinc-900 px-1.5 py-0.5 text-[10px] font-bold hover:bg-zinc-100 rounded"
                                     >
                                       -
                                     </button>
@@ -624,22 +615,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                       type="number"
                                       value={item.price}
                                       onChange={(e) => quickSavePrice(cat.id, item.id, Number(e.target.value))}
-                                      className="w-12 bg-transparent text-[10px] font-bold text-blue-600 text-center outline-none"
+                                      className="w-12 bg-transparent text-[10px] font-semibold text-zinc-900 text-center outline-none"
                                     />
                                     <button
                                       type="button"
                                       onClick={() => quickSavePrice(cat.id, item.id, item.price + 5)}
-                                      className="text-slate-500 hover:text-slate-900 px-1.5 py-0.5 text-[10px] font-extrabold hover:bg-slate-100 rounded"
+                                      className="text-zinc-500 hover:text-zinc-900 px-1.5 py-0.5 text-[10px] font-bold hover:bg-zinc-100 rounded"
                                     >
                                       +
                                     </button>
-                                    <span className="text-[9px] text-slate-400 font-bold pr-1.5">{t('currency')}</span>
+                                    <span className="text-[9px] text-zinc-400 font-medium pr-1.5">{t('currency')}</span>
                                   </div>
 
                                   <button
                                     type="button"
                                     onClick={() => toggleItemAvailability(cat.id, item.id)}
-                                    className={`text-[8px] font-bold px-2 py-1 rounded transition cursor-pointer ${
+                                    className={`text-[8px] font-medium px-2 py-1 rounded transition cursor-pointer ${
                                       item.isAvailable 
                                         ? 'bg-green-500/10 text-emerald-600 border border-emerald-200' 
                                         : 'bg-red-500/10 text-red-600 border border-red-200'
@@ -648,14 +639,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                     {item.isAvailable ? 'In Stock' : 'Out of Stock'}
                                   </button>
 
-                                  {item.isHidden && <span className="bg-slate-100 text-slate-500 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">Hidden</span>}
+                                  {item.isHidden && <span className="bg-zinc-100 text-zinc-500 text-[8px] font-medium px-1.5 py-0.5 rounded uppercase">Hidden</span>}
                                 </div>
                               </div>
                             </div>
 
-                            <div className="border-t border-slate-200/80 pt-3 mt-3 flex items-center justify-between gap-1.5">
-                              {/* Option and addons tag */}
-                              <div className="text-[9px] text-slate-400 font-semibold">
+                            <div className="border-t border-zinc-200/80 pt-3 mt-3 flex items-center justify-between gap-1.5">
+                              <div className="text-[9px] text-zinc-400 font-medium">
                                 {item.variants.length > 0 ? `${item.variants.length} Options` : ''}{' '}
                                 {item.addons.length > 0 ? `${item.addons.length} Addons` : ''}
                               </div>
@@ -663,7 +653,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                               <div className="flex items-center gap-1.5">
                                 <button
                                   onClick={() => setEditingItem({ categoryId: cat.id, item })}
-                                  className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded"
+                                  className="text-[10px] bg-zinc-100 hover:bg-zinc-200 text-zinc-600 px-2 py-1 rounded"
                                 >
                                   Edit
                                 </button>
@@ -686,14 +676,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
             {/* Category Modal Dialog */}
             {editingCategory && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-65 p-4 text-gray-900 animate-fade-in">
-                <form onSubmit={saveCategory} className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl relative space-y-4">
-                  <h3 className="text-md font-bold text-slate-900">
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 animate-fade-in">
+                <form onSubmit={saveCategory} className="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl relative space-y-4">
+                  <h3 className="text-md font-semibold text-zinc-900">
                     {editingCategory.id ? 'Edit Category' : 'Create Category'}
                   </h3>
                   
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">{t('categoryNameEn')}</label>
+                    <label className="block text-xs font-medium text-zinc-700 mb-1">{t('categoryNameEn')}</label>
                     <input
                       type="text"
                       required
@@ -702,13 +692,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         ...editingCategory,
                         name: { ...editingCategory.name, en: e.target.value }
                       })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
+                      className="input-field"
                       placeholder="e.g. Italian Pizzas"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">{t('categoryNameAr')}</label>
+                    <label className="block text-xs font-medium text-zinc-700 mb-1">{t('categoryNameAr')}</label>
                     <input
                       type="text"
                       required
@@ -717,7 +707,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         ...editingCategory,
                         name: { ...editingCategory.name, ar: e.target.value }
                       })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs text-right"
+                      className="input-field text-right"
                       placeholder="مثال: بيتزا إيطالية"
                       dir="rtl"
                     />
@@ -727,13 +717,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <button
                       type="button"
                       onClick={() => setEditingCategory(null)}
-                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold"
+                      className="bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-4 py-2 rounded-lg text-xs font-medium"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="btn-primary py-2 px-4 rounded-xl text-xs"
+                      className="btn-primary py-2 px-4 rounded-lg text-xs"
                     >
                       Save
                     </button>
@@ -744,15 +734,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
             {/* Menu Item Dialog */}
             {editingItem && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-65 p-4 text-gray-900 animate-fade-in max-h-screen overflow-y-auto">
-                <form onSubmit={saveItem} className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl relative space-y-4 max-h-[90vh] overflow-y-auto">
-                  <h3 className="text-md font-bold text-slate-900">
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 animate-fade-in max-h-screen overflow-y-auto">
+                <form onSubmit={saveItem} className="bg-white rounded-xl w-full max-w-lg p-6 shadow-2xl relative space-y-4 max-h-[90vh] overflow-y-auto">
+                  <h3 className="text-md font-semibold text-zinc-900">
                     {editingItem.item.id ? 'Edit Dish details' : 'Add New Dish'}
                   </h3>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">{t('itemNameEn')}</label>
+                      <label className="block text-xs font-medium text-zinc-700 mb-1">{t('itemNameEn')}</label>
                       <input
                         type="text"
                         required
@@ -764,12 +754,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
                             name: { ...editingItem.item.name, en: e.target.value }
                           }
                         })}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
+                        className="input-field"
                         placeholder="e.g. Margherita DOC"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">{t('itemNameAr')}</label>
+                      <label className="block text-xs font-medium text-zinc-700 mb-1">{t('itemNameAr')}</label>
                       <input
                         type="text"
                         required
@@ -781,7 +771,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                             name: { ...editingItem.item.name, ar: e.target.value }
                           }
                         })}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs text-right"
+                        className="input-field text-right"
                         placeholder="مثال: بيتزا مارجريتا"
                         dir="rtl"
                       />
@@ -790,7 +780,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">{t('itemDescEn')}</label>
+                      <label className="block text-xs font-medium text-zinc-700 mb-1">{t('itemDescEn')}</label>
                       <textarea
                         value={editingItem.item.description.en}
                         onChange={(e) => setEditingItem({
@@ -801,12 +791,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           }
                         })}
                         rows={2}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs resize-none"
+                        className="input-field resize-none"
                         placeholder="Tomato, mozzarella, basil..."
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1 text-right">{t('itemDescAr')}</label>
+                      <label className="block text-xs font-medium text-zinc-700 mb-1 text-right">{t('itemDescAr')}</label>
                       <textarea
                         value={editingItem.item.description.ar}
                         onChange={(e) => setEditingItem({
@@ -817,7 +807,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           }
                         })}
                         rows={2}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs resize-none text-right"
+                        className="input-field resize-none text-right"
                         placeholder="طماطم، موزاريلا، ريحان..."
                         dir="rtl"
                       />
@@ -826,7 +816,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">{t('itemPrice')}</label>
+                      <label className="block text-xs font-medium text-zinc-700 mb-1">{t('itemPrice')}</label>
                       <input
                         type="number"
                         required
@@ -838,11 +828,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
                             price: Number(e.target.value)
                           }
                         })}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
+                        className="input-field"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">{t('itemImage')}</label>
+                      <label className="block text-xs font-medium text-zinc-700 mb-1">{t('itemImage')}</label>
                       <input
                         type="text"
                         value={editingItem.item.imageUrl}
@@ -853,7 +843,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                             imageUrl: e.target.value
                           }
                         })}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
+                        className="input-field"
                         placeholder="Image URL"
                       />
                     </div>
@@ -861,7 +851,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
                   {/* Toggles */}
                   <div className="flex gap-6 items-center">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                    <label className="flex items-center gap-2 text-xs font-medium text-zinc-700">
                       <input 
                         type="checkbox" 
                         checked={editingItem.item.isAvailable} 
@@ -869,12 +859,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           ...editingItem,
                           item: { ...editingItem.item, isAvailable: e.target.checked }
                         })}
-                        className="rounded text-blue-600 focus:ring-blue-500"
+                        className="rounded text-zinc-900 focus:ring-zinc-500"
                       />
                       <span>Available in Stock</span>
                     </label>
 
-                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                    <label className="flex items-center gap-2 text-xs font-medium text-zinc-700">
                       <input 
                         type="checkbox" 
                         checked={editingItem.item.isHidden} 
@@ -882,16 +872,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           ...editingItem,
                           item: { ...editingItem.item, isHidden: e.target.checked }
                         })}
-                        className="rounded text-blue-600 focus:ring-blue-500"
+                        className="rounded text-zinc-900 focus:ring-zinc-500"
                       />
                       <span>Hide from Menu</span>
                     </label>
                   </div>
 
                   {/* Custom Option: VARIANTS & ADDONS SUB-EDITOR */}
-                  <div className="border-t border-slate-100 pt-4">
+                  <div className="border-t border-zinc-100 pt-4">
                     <div className="flex justify-between items-center mb-3">
-                      <h4 className="text-xs font-bold text-slate-800">Sizes & Variants</h4>
+                      <h4 className="text-xs font-semibold text-zinc-800">Sizes & Variants</h4>
                       <button
                         type="button"
                         onClick={() => {
@@ -902,7 +892,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           });
                           setEditingItem({ ...editingItem, item: nextItem });
                         }}
-                        className="text-[10px] text-blue-600 hover:underline font-bold"
+                        className="text-[10px] text-zinc-900 hover:underline font-medium"
                       >
                         + Add Variant Group
                       </button>
@@ -910,7 +900,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
                     <div className="space-y-3">
                       {editingItem.item.variants.map((v, vIdx) => (
-                        <div key={vIdx} className="bg-slate-50 p-3 rounded-lg border border-slate-100 relative space-y-2">
+                        <div key={vIdx} className="bg-zinc-50 p-3 rounded-lg border border-zinc-100 relative space-y-2">
                           <button
                             type="button"
                             onClick={() => {
@@ -932,7 +922,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                 nextItem.variants[vIdx].name.en = e.target.value;
                                 setEditingItem({ ...editingItem, item: nextItem });
                               }}
-                              className="px-2 py-1 border border-slate-200 rounded text-[10px] w-full"
+                              className="px-2 py-1 border border-zinc-200 rounded text-[10px] w-full"
                               placeholder="Group Name (e.g. Size)"
                             />
                             <input 
@@ -943,14 +933,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                 nextItem.variants[vIdx].name.ar = e.target.value;
                                 setEditingItem({ ...editingItem, item: nextItem });
                               }}
-                              className="px-2 py-1 border border-slate-200 rounded text-[10px] text-right w-full"
+                              className="px-2 py-1 border border-zinc-200 rounded text-[10px] text-right w-full"
                               placeholder="اسم المجموعة (مثال: الحجم)"
                               dir="rtl"
                             />
                           </div>
 
                           {/* Options loops inside variant */}
-                          <div className="pl-4 border-l border-slate-200 space-y-1.5">
+                          <div className="pl-4 border-l border-zinc-200 space-y-1.5">
                             {v.options.map((opt, oIdx) => (
                               <div key={oIdx} className="flex gap-2 items-center">
                                 <input 
@@ -961,7 +951,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                     nextItem.variants[vIdx].options[oIdx].name.en = e.target.value;
                                     setEditingItem({ ...editingItem, item: nextItem });
                                   }}
-                                  className="px-1.5 py-0.5 border border-slate-200 rounded text-[9px]"
+                                  className="px-1.5 py-0.5 border border-zinc-200 rounded text-[9px]"
                                   placeholder="Option (EN)"
                                 />
                                 <input 
@@ -972,7 +962,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                     nextItem.variants[vIdx].options[oIdx].name.ar = e.target.value;
                                     setEditingItem({ ...editingItem, item: nextItem });
                                   }}
-                                  className="px-1.5 py-0.5 border border-slate-200 rounded text-[9px] text-right"
+                                  className="px-1.5 py-0.5 border border-zinc-200 rounded text-[9px] text-right"
                                   placeholder="الخيار (AR)"
                                   dir="rtl"
                                 />
@@ -984,7 +974,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                     nextItem.variants[vIdx].options[oIdx].priceModifier = Number(e.target.value);
                                     setEditingItem({ ...editingItem, item: nextItem });
                                   }}
-                                  className="px-1.5 py-0.5 border border-slate-200 rounded text-[9px] w-12"
+                                  className="px-1.5 py-0.5 border border-zinc-200 rounded text-[9px] w-12"
                                   placeholder="+Price"
                                 />
                                 <button
@@ -1007,7 +997,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                 nextItem.variants[vIdx].options.push({ name: { en: 'Option', ar: 'خيار' }, priceModifier: 0 });
                                 setEditingItem({ ...editingItem, item: nextItem });
                               }}
-                              className="text-[9px] text-blue-600 hover:underline block"
+                              className="text-[9px] text-zinc-900 hover:underline block"
                             >
                               + Add Option
                             </button>
@@ -1018,9 +1008,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   </div>
 
                   {/* Addons sub-editor */}
-                  <div className="border-t border-slate-100 pt-4">
+                  <div className="border-t border-zinc-100 pt-4">
                     <div className="flex justify-between items-center mb-3">
-                      <h4 className="text-xs font-bold text-slate-800">Addons & Extras</h4>
+                      <h4 className="text-xs font-semibold text-zinc-800">Addons & Extras</h4>
                       <button
                         type="button"
                         onClick={() => {
@@ -1031,7 +1021,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           });
                           setEditingItem({ ...editingItem, item: nextItem });
                         }}
-                        className="text-[10px] text-blue-600 hover:underline font-bold"
+                        className="text-[10px] text-zinc-900 hover:underline font-medium"
                       >
                         + Add Extra
                       </button>
@@ -1039,7 +1029,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
                     <div className="grid grid-cols-2 gap-2">
                       {editingItem.item.addons.map((addon, aIdx) => (
-                        <div key={aIdx} className="bg-slate-50 p-2 rounded border border-slate-100 flex gap-2 items-center relative pr-6">
+                        <div key={aIdx} className="bg-zinc-50 p-2 rounded border border-zinc-100 flex gap-2 items-center relative pr-6">
                           <input 
                             type="text" 
                             value={addon.name.en} 
@@ -1048,7 +1038,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                               nextItem.addons[aIdx].name.en = e.target.value;
                               setEditingItem({ ...editingItem, item: nextItem });
                             }}
-                            className="px-1.5 py-0.5 border border-slate-200 rounded text-[9px] w-full animate-fade-in"
+                            className="px-1.5 py-0.5 border border-zinc-200 rounded text-[9px] w-full"
                             placeholder="Name (EN)"
                           />
                           <input 
@@ -1059,7 +1049,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                               nextItem.addons[aIdx].name.ar = e.target.value;
                               setEditingItem({ ...editingItem, item: nextItem });
                             }}
-                            className="px-1.5 py-0.5 border border-slate-200 rounded text-[9px] text-right w-full"
+                            className="px-1.5 py-0.5 border border-zinc-200 rounded text-[9px] text-right w-full"
                             placeholder="الاسم (AR)"
                             dir="rtl"
                           />
@@ -1071,7 +1061,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                               nextItem.addons[aIdx].price = Number(e.target.value);
                               setEditingItem({ ...editingItem, item: nextItem });
                             }}
-                            className="px-1.5 py-0.5 border border-slate-200 rounded text-[9px] w-14"
+                            className="px-1.5 py-0.5 border border-zinc-200 rounded text-[9px] w-14"
                             placeholder="Price"
                           />
                           <button
@@ -1090,17 +1080,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex gap-2 justify-end pt-4 border-t border-slate-100">
+                  <div className="flex gap-2 justify-end pt-4 border-t border-zinc-100">
                     <button
                       type="button"
                       onClick={() => setEditingItem(null)}
-                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold"
+                      className="bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-4 py-2 rounded-lg text-xs font-medium"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="btn-primary py-2 px-4 rounded-xl text-xs"
+                      className="btn-primary py-2 px-4 rounded-lg text-xs"
                     >
                       Save Item
                     </button>
@@ -1117,8 +1107,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {activeTab === 'design' && (
           <div className="animate-fade-in space-y-6">
             <div>
-              <h2 className="text-xl font-extrabold text-slate-900">{t('dashDesign')}</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Switch the template of your generated website instantly. Content and customization are fully preserved.</p>
+              <h2 className="text-xl font-bold text-zinc-900">{t('dashDesign')}</h2>
+              <p className="text-sm text-zinc-500 mt-0.5">Switch the template of your generated website instantly. Content and customization are fully preserved.</p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -1130,21 +1120,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
               ].map((tpl) => {
                 const isSel = restaurant.templateId === tpl.id;
                 return (
-                  <div key={tpl.id} className={`bg-white rounded-2xl overflow-hidden border ${isSel ? 'border-blue-500' : 'border-slate-200'}`}>
+                  <div key={tpl.id} className={`bg-white rounded-xl overflow-hidden border ${isSel ? 'border-zinc-900 ring-2 ring-zinc-900/10' : 'border-zinc-200'} shadow-sm`}>
                     <img src={tpl.img} alt={tpl.id} className="w-full h-40 object-cover" />
                     <div className="p-4 space-y-2">
-                      <h4 className="font-bold text-slate-900 text-xs">{tpl.name}</h4>
-                      <p className="text-[10px] text-slate-500 leading-relaxed h-12 overflow-hidden">{tpl.desc}</p>
+                      <h4 className="font-semibold text-zinc-900 text-sm">{tpl.name}</h4>
+                      <p className="text-xs text-zinc-500 leading-relaxed h-12 overflow-hidden">{tpl.desc}</p>
                       
                       <button
                         onClick={() => {
                           db.updateRestaurant(restaurantId, { templateId: tpl.id as any });
                           reloadData();
                         }}
-                        className={`w-full py-2 rounded-xl text-[10px] font-bold transition mt-2 ${
+                        className={`w-full py-2 rounded-lg text-xs font-medium transition mt-2 ${
                           isSel 
-                            ? 'bg-blue-600 text-slate-900 cursor-default' 
-                            : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                            ? 'bg-zinc-900 text-white cursor-default' 
+                            : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600'
                         }`}
                       >
                         {isSel ? '✓ Active Template' : 'Activate Template'}
@@ -1156,27 +1146,27 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
 
             {/* Live Interactive Web Site Preview */}
-            <div className="pt-6 border-t border-slate-200 space-y-4">
+            <div className="pt-6 border-t border-zinc-200 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <Eye className="w-4 h-4 text-rose-500" />
+                  <h3 className="text-sm font-semibold text-zinc-900 flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-zinc-500" />
                     <span>Live Website Preview</span>
                   </h3>
-                  <p className="text-[11px] text-slate-500">This is how your customers experience your menu online in real-time.</p>
+                  <p className="text-xs text-zinc-500">This is how your customers experience your menu online in real-time.</p>
                 </div>
                 <a 
                   href={siteUrl} 
                   target="_blank" 
                   rel="noreferrer"
-                  className="bg-rose-600 hover:bg-rose-500 text-slate-900 font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 shadow"
+                  className="btn-primary text-xs px-3.5 py-2 rounded-lg transition flex items-center gap-1.5"
                 >
                   <Eye className="w-3.5 h-3.5" />
                   <span>Open Full Link</span>
                 </a>
               </div>
 
-              <div className="rounded-3xl border border-slate-200 overflow-hidden shadow-2xl bg-slate-50 max-h-[600px] overflow-y-auto">
+              <div className="rounded-xl border border-zinc-200 overflow-hidden shadow-sm bg-zinc-50 max-h-[600px] overflow-y-auto">
                 <TemplateWrapper restaurantId={restaurantId} isPreview={true} />
               </div>
             </div>
@@ -1189,28 +1179,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {activeTab === 'branding' && (
           <div className="animate-fade-in space-y-6">
             <div>
-              <h2 className="text-xl font-extrabold text-slate-900">{t('dashBranding')}</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Customize your brand design colors, typography fonts, logo and hero cover photo.</p>
+              <h2 className="text-xl font-bold text-zinc-900">{t('dashBranding')}</h2>
+              <p className="text-sm text-zinc-500 mt-0.5">Customize your brand design colors, typography fonts, logo and hero cover photo.</p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
               {/* Branding details */}
               <div className="lg:col-span-5 space-y-6">
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
-                  {/* Logo color picker trigger */}
-                  {restaurant.logoUrl && (
-                    <button
-                      onClick={handleExtractColors}
-                      className="w-full bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-600/15 py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition"
-                    >
-                      <Sparkles className="w-4 h-4 text-blue-600" />
-                      <span>{t('aiColorBtn')}</span>
-                    </button>
-                  )}
-
+                <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm space-y-6">
                   {/* Colors grid */}
                   <div className="space-y-4">
-                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">{t('colorPaletteTitle')}</h3>
+                    <h3 className="text-xs font-semibold text-zinc-900 uppercase tracking-wider">{t('colorPaletteTitle')}</h3>
                     
                     <div className="grid grid-cols-1 gap-3">
                       {[
@@ -1220,8 +1199,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         { key: 'buttonColor', label: t('colorButton') },
                         { key: 'textColor', label: t('colorText') },
                       ].map((item) => (
-                        <div key={item.key} className="flex items-center justify-between bg-slate-50 p-2 border border-slate-200 rounded-xl">
-                          <span className="text-[10px] text-slate-500">{item.label}</span>
+                        <div key={item.key} className="flex items-center justify-between bg-zinc-50 p-2 border border-zinc-200 rounded-lg">
+                          <span className="text-xs text-zinc-500">{item.label}</span>
                           <div className="flex gap-2 items-center">
                             <input
                               type="color"
@@ -1237,7 +1216,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                               }}
                               className="w-8 h-8 cursor-pointer border-none bg-transparent"
                             />
-                            <span className="text-[10px] font-mono text-slate-600 font-bold uppercase">
+                            <span className="text-[10px] font-mono text-zinc-600 font-medium uppercase">
                               {(restaurant.branding as any)[item.key]}
                             </span>
                           </div>
@@ -1248,7 +1227,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
                   {/* Typography Font */}
                   <div>
-                    <label className="block text-xs font-bold text-slate-900 uppercase tracking-wider mb-2">{t('fontLabel')}</label>
+                    <label className="block text-xs font-semibold text-zinc-900 uppercase tracking-wider mb-2">{t('fontLabel')}</label>
                     <select
                       value={restaurant.branding.fontFamily}
                       onChange={(e) => {
@@ -1260,7 +1239,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         });
                         reloadData();
                       }}
-                      className="input-field py-2 text-xs"
+                      className="input-field py-2 text-sm"
                     >
                       <option value="Outfit, Cairo">Outfit / Cairo (Modern Sans)</option>
                       <option value="Playfair Display, Cairo">Playfair Display / Cairo (Luxury Serif)</option>
@@ -1270,22 +1249,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </div>
 
                 {/* Logo & Cover images edit presets */}
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Logo & Brand Media</h3>
+                <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm space-y-4">
+                  <h3 className="text-xs font-semibold text-zinc-900 uppercase tracking-wider">Logo & Brand Media</h3>
                   
                   {/* Logo upload simulator */}
                   <div>
-                    <label className="block text-[10px] text-slate-500 font-semibold mb-1.5">Change Logo</label>
+                    <label className="block text-xs text-zinc-500 font-medium mb-1.5">Change Logo</label>
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleLogoUpload('https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=120&auto=format&fit=crop&q=60')}
-                        className="text-[9px] bg-slate-100 hover:bg-slate-100 text-slate-600 border border-slate-200 px-2 py-1 rounded"
+                        className="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-600 border border-zinc-200 px-2 py-1 rounded"
                       >
                         Pizza Logo
                       </button>
                       <button
                         onClick={() => handleLogoUpload('https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=120&auto=format&fit=crop&q=60')}
-                        className="text-[9px] bg-slate-100 hover:bg-slate-100 text-slate-600 border border-slate-200 px-2 py-1 rounded"
+                        className="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-600 border border-zinc-200 px-2 py-1 rounded"
                       >
                         Burger Logo
                       </button>
@@ -1294,17 +1273,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
                   {/* Cover image uploader simulator */}
                   <div>
-                    <label className="block text-[10px] text-slate-500 font-semibold mb-1.5">Change Cover Photo</label>
+                    <label className="block text-xs text-zinc-500 font-medium mb-1.5">Change Cover Photo</label>
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleCoverUpload('https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400&auto=format&fit=crop&q=80')}
-                        className="text-[9px] bg-slate-100 hover:bg-slate-100 text-slate-600 border border-slate-200 px-2 py-1 rounded"
+                        className="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-600 border border-zinc-200 px-2 py-1 rounded"
                       >
                         Pizza Cover
                       </button>
                       <button
                         onClick={() => handleCoverUpload('https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400&auto=format&fit=crop&q=80')}
-                        className="text-[9px] bg-slate-100 hover:bg-slate-100 text-slate-600 border border-slate-200 px-2 py-1 rounded"
+                        className="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-600 border border-zinc-200 px-2 py-1 rounded"
                       >
                         Burger Cover
                       </button>
@@ -1316,16 +1295,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
               {/* Live Preview Column */}
               <div className="lg:col-span-7 space-y-4">
                 <div className="flex justify-between items-center">
-                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Live Template Preview</h3>
+                  <h3 className="text-xs font-semibold text-zinc-900 uppercase tracking-wider">Live Template Preview</h3>
                   <button 
                     onClick={handlePublish}
-                    className="text-xs bg-green-600 hover:bg-green-700 text-slate-900 px-3.5 py-1.5 rounded-lg font-bold transition flex items-center gap-1"
+                    className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-lg font-medium transition flex items-center gap-1"
                   >
                     <span>{t('publishBtn')}</span>
                   </button>
                 </div>
                 
-                <div className="border border-slate-200 rounded-3xl overflow-hidden h-[420px] shadow-2xl relative bg-white">
+                <div className="border border-zinc-200 rounded-xl overflow-hidden h-[420px] shadow-sm relative bg-white">
                   <div className="h-full overflow-y-auto">
                     <TemplateWrapper restaurantId={restaurantId} isPreview={true} />
                   </div>
@@ -1342,12 +1321,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div className="animate-fade-in space-y-6">
             <div className="flex justify-between items-center">
               <div>
-                <h2 className="text-xl font-extrabold text-slate-900">{t('dashOrders')}</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Manage incoming client pickup and delivery orders.</p>
+                <h2 className="text-xl font-bold text-zinc-900">{t('dashOrders')}</h2>
+                <p className="text-sm text-zinc-500 mt-0.5">Manage incoming client pickup and delivery orders.</p>
               </div>
               
               {/* Order filter buttons */}
-              <div className="flex gap-1 bg-slate-50 p-1 border border-slate-200 rounded-xl">
+              <div className="flex gap-1 bg-white p-1 border border-zinc-200 rounded-lg">
                 {[
                   { id: 'all', label: 'All' },
                   { id: 'pending', label: t('statusPending') },
@@ -1358,10 +1337,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <button
                     key={f.id}
                     onClick={() => setActiveOrderFilter(f.id as any)}
-                    className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition ${
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
                       activeOrderFilter === f.id 
-                        ? 'bg-blue-600 text-slate-900' 
-                        : 'text-slate-500 hover:text-slate-900'
+                        ? 'bg-zinc-900 text-white' 
+                        : 'text-zinc-500 hover:text-zinc-900'
                     }`}
                   >
                     {f.label}
@@ -1373,16 +1352,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
             {/* Split layout: Orders list + Details */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               {/* Orders List Table */}
-              <div className="lg:col-span-7 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
+              <div className="lg:col-span-7 bg-white p-6 rounded-xl border border-zinc-200 shadow-sm">
                 {orders.length === 0 ? (
-                  <div className="text-center py-12 text-slate-400 text-xs italic">
+                  <div className="text-center py-12 text-zinc-400 text-sm italic">
                     {t('noOrders')}
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="text-xs text-slate-600">
+                    <table className="text-sm text-zinc-600">
                       <thead>
-                        <tr className="text-slate-400">
+                        <tr className="text-zinc-400">
                           <th>{t('orderId')}</th>
                           <th>{t('customer')}</th>
                           <th>{t('orderTypeLabel')}</th>
@@ -1399,14 +1378,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
                               <tr 
                                 key={ord.id} 
                                 onClick={() => setActiveOrderDetails(ord)}
-                                className={`hover:bg-slate-100/10 cursor-pointer transition ${isSel ? 'bg-blue-50 text-slate-900 font-bold' : ''}`}
+                                className={`hover:bg-zinc-50 cursor-pointer transition ${isSel ? 'bg-zinc-50 text-zinc-900 font-medium' : ''}`}
                               >
-                                <td className="font-mono text-blue-600 font-bold">{ord.id}</td>
+                                <td className="font-mono text-zinc-900 font-semibold">{ord.id}</td>
                                 <td>{ord.customerName}</td>
                                 <td>{stText(ord.orderType)}</td>
-                                <td className="font-bold">{ord.totalPrice} {t('currency')}</td>
+                                <td className="font-semibold">{ord.totalPrice} {t('currency')}</td>
                                 <td>
-                                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
                                     ord.status === 'pending' ? 'bg-amber-50 text-amber-600' :
                                     ord.status === 'preparing' ? 'bg-blue-50 text-blue-600' :
                                     ord.status === 'completed' ? 'bg-emerald-50 text-emerald-600' :
@@ -1427,13 +1406,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
               {/* Order Detail Panel */}
               <div className="lg:col-span-5">
                 {activeOrderDetails ? (
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6 animate-slide-up">
-                    <div className="flex justify-between items-center border-b border-slate-200 pb-3">
+                  <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm space-y-6 animate-slide-up">
+                    <div className="flex justify-between items-center border-b border-zinc-100 pb-3">
                       <div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Selected Order</span>
-                        <h3 className="font-mono text-sm text-blue-600 font-bold">{activeOrderDetails.id}</h3>
+                        <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider block">Selected Order</span>
+                        <h3 className="font-mono text-sm text-zinc-900 font-semibold">{activeOrderDetails.id}</h3>
                       </div>
-                      <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${
+                      <span className={`px-3 py-1 rounded-full text-[10px] font-medium ${
                         activeOrderDetails.status === 'pending' ? 'bg-amber-50 text-amber-600' :
                         activeOrderDetails.status === 'preparing' ? 'bg-blue-50 text-blue-600' :
                         activeOrderDetails.status === 'completed' ? 'bg-emerald-50 text-emerald-600' :
@@ -1444,54 +1423,54 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </div>
 
                     {/* Customer details */}
-                    <div className="space-y-2 text-xs text-slate-600">
+                    <div className="space-y-2 text-sm text-zinc-600">
                       <div>
-                        <span className="text-slate-400 block">{t('customer')}</span>
-                        <span className="font-bold text-slate-900">{activeOrderDetails.customerName}</span>
+                        <span className="text-zinc-400 block">{t('customer')}</span>
+                        <span className="font-medium text-zinc-900">{activeOrderDetails.customerName}</span>
                       </div>
                       <div>
-                        <span className="text-slate-400 block">{t('phoneField')}</span>
-                        <span className="font-semibold">{activeOrderDetails.customerPhone}</span>
+                        <span className="text-zinc-400 block">{t('phoneField')}</span>
+                        <span className="font-medium">{activeOrderDetails.customerPhone}</span>
                       </div>
                       {activeOrderDetails.orderType === 'delivery' && (
                         <div>
-                          <span className="text-slate-400 block">{t('addressField')}</span>
+                          <span className="text-zinc-400 block">{t('addressField')}</span>
                           <span className="font-medium">{activeOrderDetails.customerAddress}</span>
                         </div>
                       )}
                       <div>
-                        <span className="text-slate-400 block">{t('notesLabel')}</span>
-                        <p className="italic bg-slate-50/20 p-2.5 rounded-lg border border-gray-850 mt-1">
+                        <span className="text-zinc-400 block">{t('notesLabel')}</span>
+                        <p className="italic bg-zinc-50 p-2.5 rounded-lg border border-zinc-100 mt-1">
                           {activeOrderDetails.notes || 'No special notes.'}
                         </p>
                       </div>
                     </div>
 
                     {/* Order Items */}
-                    <div className="border-y border-slate-200 py-4 space-y-3">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Order Items</span>
+                    <div className="border-y border-zinc-100 py-4 space-y-3">
+                      <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest block mb-2">Order Items</span>
                       {activeOrderDetails.items.map((item, idx) => (
-                        <div key={idx} className="flex justify-between items-start text-xs">
+                        <div key={idx} className="flex justify-between items-start text-sm">
                           <div>
-                            <span className="font-bold text-slate-900">{item.quantity}x {tText(item.name)}</span>
+                            <span className="font-medium text-zinc-900">{item.quantity}x {tText(item.name)}</span>
                             {item.selectedVariants.length > 0 && (
-                              <p className="text-[10px] text-slate-400">
+                              <p className="text-xs text-zinc-400">
                                 {item.selectedVariants.map(v => tText(v.optionName)).join(', ')}
                               </p>
                             )}
                             {item.selectedAddons.length > 0 && (
-                              <p className="text-[10px] text-emerald-600">
+                              <p className="text-xs text-emerald-600">
                                 + {item.selectedAddons.map(a => tText(a.name)).join(', ')}
                               </p>
                             )}
                           </div>
-                          <span className="font-bold">{item.price * item.quantity} {t('currency')}</span>
+                          <span className="font-medium">{item.price * item.quantity} {t('currency')}</span>
                         </div>
                       ))}
                       
-                      <div className="flex justify-between items-center pt-2 font-bold text-slate-900 text-xs">
+                      <div className="flex justify-between items-center pt-2 font-semibold text-zinc-900 text-sm">
                         <span>Total Payable</span>
-                        <span className="text-sm text-emerald-600">{activeOrderDetails.totalPrice} {t('currency')}</span>
+                        <span className="text-base text-emerald-600">{activeOrderDetails.totalPrice} {t('currency')}</span>
                       </div>
                     </div>
 
@@ -1500,9 +1479,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       {activeOrderDetails.status === 'pending' && (
                         <button
                           onClick={() => handleUpdateOrderStatus(activeOrderDetails.id, 'preparing')}
-                          className="w-full btn-primary py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5"
+                          className="w-full btn-primary py-2.5 rounded-lg text-sm flex items-center justify-center gap-1.5"
                         >
-                          <Check className="w-4 h-4 text-slate-900" />
+                          <Check className="w-4 h-4" />
                           <span>{t('acceptOrder')}</span>
                         </button>
                       )}
@@ -1510,9 +1489,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       {activeOrderDetails.status === 'preparing' && (
                         <button
                           onClick={() => handleUpdateOrderStatus(activeOrderDetails.id, 'completed')}
-                          className="w-full bg-green-600 hover:bg-green-700 text-slate-900 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition"
+                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5 transition"
                         >
-                          <Check className="w-4 h-4 text-slate-900" />
+                          <Check className="w-4 h-4" />
                           <span>{t('completeOrder')}</span>
                         </button>
                       )}
@@ -1520,7 +1499,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       {activeOrderDetails.status !== 'completed' && activeOrderDetails.status !== 'cancelled' && (
                         <button
                           onClick={() => handleUpdateOrderStatus(activeOrderDetails.id, 'cancelled')}
-                          className="w-full bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 py-2 rounded-xl text-xs font-semibold transition"
+                          className="w-full bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 py-2 rounded-lg text-sm font-medium transition"
                         >
                           <span>{t('cancelOrder')}</span>
                         </button>
@@ -1528,7 +1507,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-xs text-center text-slate-400 text-xs italic">
+                  <div className="bg-white p-8 rounded-xl border border-zinc-200 shadow-sm text-center text-zinc-400 text-sm italic">
                     Select an order from the list to view full details and process kitchen preparation steps.
                   </div>
                 )}
@@ -1543,8 +1522,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {activeTab === 'info' && (
           <div className="animate-fade-in space-y-6 max-w-3xl">
             <div>
-              <h2 className="text-xl font-extrabold text-slate-900">{t('dashInfo')}</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Edit store profiles, maps, and schedules in both Arabic & English.</p>
+              <h2 className="text-xl font-bold text-zinc-900">{t('dashInfo')}</h2>
+              <p className="text-sm text-zinc-500 mt-0.5">Edit store profiles, maps, and schedules in both Arabic & English.</p>
             </div>
 
             <form 
@@ -1552,14 +1531,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 e.preventDefault();
                 alert(t('publishSuccess'));
               }}
-              className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6"
+              className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm space-y-6"
             >
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* EN */}
                 <div className="space-y-4">
-                  <h4 className="text-xs font-bold text-blue-600 uppercase tracking-widest border-b border-slate-200 pb-2">🇬🇧 English Fields</h4>
+                  <h4 className="text-xs font-semibold text-zinc-900 uppercase tracking-widest border-b border-zinc-100 pb-2">🇬🇧 English Fields</h4>
                   <div>
-                    <label className="block text-[10px] text-slate-500 font-semibold mb-1">{t('nameEnLabel')}</label>
+                    <label className="block text-xs text-zinc-500 font-medium mb-1">{t('nameEnLabel')}</label>
                     <input
                       type="text"
                       value={restaurant.name.en}
@@ -1567,11 +1546,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         db.updateRestaurant(restaurantId, { name: { ...restaurant.name, en: e.target.value } });
                         reloadData();
                       }}
-                      className="input-field text-xs py-2"
+                      className="input-field text-sm py-2"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] text-slate-500 font-semibold mb-1">{t('descEnLabel')}</label>
+                    <label className="block text-xs text-zinc-500 font-medium mb-1">{t('descEnLabel')}</label>
                     <textarea
                       value={restaurant.description.en}
                       onChange={(e) => {
@@ -1579,11 +1558,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         reloadData();
                       }}
                       rows={3}
-                      className="input-field text-xs resize-none"
+                      className="input-field text-sm resize-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] text-slate-500 font-semibold mb-1">{t('addressEnLabel')}</label>
+                    <label className="block text-xs text-zinc-500 font-medium mb-1">{t('addressEnLabel')}</label>
                     <input
                       type="text"
                       value={restaurant.address.en}
@@ -1591,11 +1570,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         db.updateRestaurant(restaurantId, { address: { ...restaurant.address, en: e.target.value } });
                         reloadData();
                       }}
-                      className="input-field text-xs py-2"
+                      className="input-field text-sm py-2"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] text-slate-500 font-semibold mb-1">{t('hoursEnLabel')}</label>
+                    <label className="block text-xs text-zinc-500 font-medium mb-1">{t('hoursEnLabel')}</label>
                     <input
                       type="text"
                       value={restaurant.openingHours.en}
@@ -1603,16 +1582,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         db.updateRestaurant(restaurantId, { openingHours: { ...restaurant.openingHours, en: e.target.value } });
                         reloadData();
                       }}
-                      className="input-field text-xs py-2"
+                      className="input-field text-sm py-2"
                     />
                   </div>
                 </div>
 
                 {/* AR */}
                 <div className="space-y-4" dir="rtl">
-                  <h4 className="text-xs font-bold text-blue-600 uppercase tracking-widest border-b border-slate-200 pb-2 text-left">🇪🇬 الحقول العربية</h4>
+                  <h4 className="text-xs font-semibold text-zinc-900 uppercase tracking-widest border-b border-zinc-100 pb-2 text-left">🇪🇬 الحقول العربية</h4>
                   <div>
-                    <label className="block text-[10px] text-slate-500 font-semibold mb-1 text-right">{t('nameArLabel')}</label>
+                    <label className="block text-xs text-zinc-500 font-medium mb-1 text-right">{t('nameArLabel')}</label>
                     <input
                       type="text"
                       value={restaurant.name.ar}
@@ -1620,11 +1599,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         db.updateRestaurant(restaurantId, { name: { ...restaurant.name, ar: e.target.value } });
                         reloadData();
                       }}
-                      className="input-field text-xs py-2 text-right"
+                      className="input-field text-sm py-2 text-right"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] text-slate-500 font-semibold mb-1 text-right">{t('descArLabel')}</label>
+                    <label className="block text-xs text-zinc-500 font-medium mb-1 text-right">{t('descArLabel')}</label>
                     <textarea
                       value={restaurant.description.ar}
                       onChange={(e) => {
@@ -1632,11 +1611,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         reloadData();
                       }}
                       rows={3}
-                      className="input-field text-xs resize-none text-right"
+                      className="input-field text-sm resize-none text-right"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] text-slate-500 font-semibold mb-1 text-right">{t('addressArLabel')}</label>
+                    <label className="block text-xs text-zinc-500 font-medium mb-1 text-right">{t('addressArLabel')}</label>
                     <input
                       type="text"
                       value={restaurant.address.ar}
@@ -1644,11 +1623,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         db.updateRestaurant(restaurantId, { address: { ...restaurant.address, ar: e.target.value } });
                         reloadData();
                       }}
-                      className="input-field text-xs py-2 text-right"
+                      className="input-field text-sm py-2 text-right"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] text-slate-500 font-semibold mb-1 text-right">{t('hoursArLabel')}</label>
+                    <label className="block text-xs text-zinc-500 font-medium mb-1 text-right">{t('hoursArLabel')}</label>
                     <input
                       type="text"
                       value={restaurant.openingHours.ar}
@@ -1656,16 +1635,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         db.updateRestaurant(restaurantId, { openingHours: { ...restaurant.openingHours, ar: e.target.value } });
                         reloadData();
                       }}
-                      className="input-field text-xs py-2 text-right"
+                      className="input-field text-sm py-2 text-right"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Contacts */}
-              <div className="border-t border-slate-200 pt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="border-t border-zinc-100 pt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-[10px] text-slate-500 font-semibold mb-1">{t('phoneLabel')}</label>
+                  <label className="block text-xs text-zinc-500 font-medium mb-1">{t('phoneLabel')}</label>
                   <input
                     type="text"
                     value={restaurant.phone}
@@ -1673,11 +1652,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       db.updateRestaurant(restaurantId, { phone: e.target.value });
                       reloadData();
                     }}
-                    className="input-field text-xs py-2"
+                    className="input-field text-sm py-2"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] text-slate-500 font-semibold mb-1">{t('whatsappLabel')}</label>
+                  <label className="block text-xs text-zinc-500 font-medium mb-1">{t('whatsappLabel')}</label>
                   <input
                     type="text"
                     value={restaurant.whatsAppNumber}
@@ -1685,11 +1664,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       db.updateRestaurant(restaurantId, { whatsAppNumber: e.target.value });
                       reloadData();
                     }}
-                    className="input-field text-xs py-2"
+                    className="input-field text-sm py-2"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] text-slate-500 font-semibold mb-1">{t('mapsLabel')}</label>
+                  <label className="block text-xs text-zinc-500 font-medium mb-1">{t('mapsLabel')}</label>
                   <input
                     type="text"
                     value={restaurant.googleMapsLink}
@@ -1697,14 +1676,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       db.updateRestaurant(restaurantId, { googleMapsLink: e.target.value });
                       reloadData();
                     }}
-                    className="input-field text-xs py-2"
+                    className="input-field text-sm py-2"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end pt-4 border-t border-slate-200">
-                <button type="submit" className="btn-primary py-2 px-6 rounded-xl text-xs flex items-center gap-1">
-                  <Check className="w-4 h-4 text-slate-900" />
+              <div className="flex justify-end pt-4 border-t border-zinc-100">
+                <button type="submit" className="btn-primary py-2 px-6 rounded-lg text-sm flex items-center gap-1">
+                  <Check className="w-4 h-4" />
                   <span>{t('saveChanges')}</span>
                 </button>
               </div>
@@ -1718,15 +1697,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {activeTab === 'settings' && (
           <div className="animate-fade-in space-y-6 max-w-2xl">
             <div>
-              <h2 className="text-xl font-extrabold text-slate-900">{t('dashSettings')}</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Manage domain structures and active pricing subscriptions.</p>
+              <h2 className="text-xl font-bold text-zinc-900">{t('dashSettings')}</h2>
+              <p className="text-sm text-zinc-500 mt-0.5">Manage domain structures and active pricing subscriptions.</p>
             </div>
 
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
+            <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm space-y-6">
               {/* Domain settings */}
               <div>
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3">{t('domainSettings')}</h3>
-                <label className="block text-[10px] text-slate-500 font-semibold mb-1.5">{t('customDomainLabel')}</label>
+                <h3 className="text-xs font-semibold text-zinc-900 uppercase tracking-wider mb-3">{t('domainSettings')}</h3>
+                <label className="block text-xs text-zinc-500 font-medium mb-1.5">{t('customDomainLabel')}</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -1735,56 +1714,75 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       db.updateRestaurant(restaurantId, { domain: `${e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '')}.bistroflow.com` });
                       reloadData();
                     }}
-                    className="input-field text-xs py-2 flex-1"
+                    className="input-field text-sm py-2 flex-1"
                   />
-                  <span className="bg-slate-100 border border-slate-300 px-4 py-2 rounded-xl text-xs text-slate-500 flex items-center">
+                  <span className="bg-zinc-100 border border-zinc-200 px-4 py-2 rounded-lg text-sm text-zinc-500 flex items-center">
                     .bistroflow.com
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1.5">Customers will navigate to this URL to view your active menu and place orders.</p>
+                <p className="text-xs text-zinc-400 mt-1.5">Customers will navigate to this URL to view your active menu and place orders.</p>
               </div>
 
               {/* Plan Settings */}
-              <div className="border-t border-slate-200 pt-6">
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4">{t('pricingPlanLabel')}</h3>
+              <div className="border-t border-zinc-100 pt-6">
+                <h3 className="text-xs font-semibold text-zinc-900 uppercase tracking-wider mb-4">{t('pricingPlanLabel')}</h3>
                 
                 <div className="grid grid-cols-2 gap-4">
-                  {/* Starter Box */}
+                  {/* Website Box */}
                   <div 
                     onClick={() => {
-                      db.updateRestaurant(restaurantId, { pricingPlan: 'starter' });
+                      db.updateRestaurant(restaurantId, { pricingPlan: 'website' });
                       reloadData();
                     }}
-                    className={`p-4 rounded-2xl border cursor-pointer transition flex flex-col justify-between h-36 ${
-                      restaurant.pricingPlan === 'starter' 
-                        ? 'border-blue-600 bg-blue-50' 
-                        : 'border-gray-850 hover:bg-white'
+                    className={`p-4 rounded-xl border cursor-pointer transition flex flex-col justify-between h-36 ${
+                      restaurant.pricingPlan === 'website' 
+                        ? 'border-zinc-900 bg-zinc-50' 
+                        : 'border-zinc-200 hover:bg-white'
                     }`}
                   >
                     <div>
-                      <span className="font-extrabold text-xs text-slate-900 block">Starter Plan</span>
-                      <span className="text-[10px] text-slate-500 mt-1 block">Low setup fee, static menu website. No ordering cart.</span>
+                      <span className="font-semibold text-sm text-zinc-900 block">Website Plan</span>
+                      <span className="text-xs text-zinc-500 mt-1 block">Professional website with menu and WhatsApp ordering.</span>
                     </div>
-                    <span className="text-[10px] font-black text-blue-600 mt-auto">$19 One-Time</span>
+                    <span className="text-xs font-bold text-zinc-900 mt-auto">$15 One-Time</span>
                   </div>
 
-                  {/* Pro Box */}
+                  {/* Orders Box */}
                   <div 
                     onClick={() => {
-                      db.updateRestaurant(restaurantId, { pricingPlan: 'professional' });
+                      db.updateRestaurant(restaurantId, { pricingPlan: 'orders' });
                       reloadData();
                     }}
-                    className={`p-4 rounded-2xl border cursor-pointer transition flex flex-col justify-between h-36 ${
-                      restaurant.pricingPlan === 'professional' 
-                        ? 'border-blue-600 bg-blue-50' 
-                        : 'border-gray-855 hover:bg-white'
+                    className={`p-4 rounded-xl border cursor-pointer transition flex flex-col justify-between h-36 ${
+                      restaurant.pricingPlan === 'orders' 
+                        ? 'border-zinc-900 bg-zinc-50' 
+                        : 'border-zinc-200 hover:bg-white'
                     }`}
                   >
                     <div>
-                      <span className="font-extrabold text-xs text-slate-900 block">Professional Plan</span>
-                      <span className="text-[10px] text-slate-500 mt-1 block">Bilingual cart, ordering, WhatsApp notifications, dashboard control.</span>
+                      <span className="font-semibold text-sm text-zinc-900 block">Orders Plan</span>
+                      <span className="text-xs text-zinc-500 mt-1 block">Full menu management, online ordering, and order dashboard.</span>
                     </div>
-                    <span className="text-[10px] font-black text-emerald-600 mt-auto">$49 / Month</span>
+                    <span className="text-xs font-bold text-emerald-600 mt-auto">$100 One-Time</span>
+                  </div>
+
+                  {/* Integrated Box */}
+                  <div 
+                    onClick={() => {
+                      db.updateRestaurant(restaurantId, { pricingPlan: 'integrated' });
+                      reloadData();
+                    }}
+                    className={`p-4 rounded-xl border cursor-pointer transition flex flex-col justify-between h-36 ${
+                      restaurant.pricingPlan === 'integrated' 
+                        ? 'border-zinc-900 bg-zinc-50' 
+                        : 'border-zinc-200 hover:bg-white'
+                    }`}
+                  >
+                    <div>
+                      <span className="font-semibold text-sm text-zinc-900 block">Integrated Plan</span>
+                      <span className="text-xs text-zinc-500 mt-1 block">POS integration and advanced order management.</span>
+                    </div>
+                    <span className="text-xs font-bold text-blue-600 mt-auto">$500 One-Time</span>
                   </div>
                 </div>
               </div>
@@ -1800,8 +1798,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
 function RefreshProgress() {
   return (
     <div className="flex flex-col items-center gap-3">
-      <RefreshCw className="w-8 h-8 text-blue-600 animate-spin" />
-      <span className="text-sm font-semibold text-slate-500">Loading your BistroFlow dashboard...</span>
+      <RefreshCw className="w-8 h-8 text-zinc-900 animate-spin" />
+      <span className="text-sm font-medium text-zinc-500">Loading your BistroFlow dashboard...</span>
     </div>
   );
 }
@@ -1821,4 +1819,3 @@ function stText(key: string): string {
   const currentLang = localStorage.getItem('bistroflow_lang') || 'en';
   return ORDER_STATUS_TRANSLATIONS[key]?.[currentLang as 'en' | 'ar'] || key;
 }
-

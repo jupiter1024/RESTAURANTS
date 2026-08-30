@@ -5,18 +5,17 @@ import { useLanguage } from '../utils/translate';
 import { TemplateWrapper } from '../templates/TemplateWrapper';
 import { 
   Building, 
-  Image as ImageIcon, 
-  FileText, 
   Palette, 
   Check, 
   ArrowLeft, 
-  Sparkles, 
   Plus, 
   Trash2,
   Upload,
-  Layers,
   ChevronRight,
-  RefreshCw
+  UtensilsCrossed,
+  Eye,
+  Rocket,
+  Store
 } from 'lucide-react';
 
 interface OnboardingProps {
@@ -46,16 +45,8 @@ export const Onboarding: React.FC<OnboardingProps> = ({
 
   // STEP 2 FIELDS (Logo)
   const [logoUrl, setLogoUrl] = useState('');
-  const [uploadingLogo, setUploadingLogo] = useState(false);
 
-  // STEP 3 FIELDS (Menu Import)
-  const [menuFileType, setMenuFileType] = useState<'pdf' | 'csv' | 'image' | null>(null);
-  const [menuFileName, setMenuFileName] = useState('');
-  const [aiProcessing, setAiProcessing] = useState(false);
-  const [aiProgressStep, setAiProgressStep] = useState(0);
-  const [extractedCategories, setExtractedCategories] = useState<MenuCategory[]>([]);
-
-  // STEP 4 FIELDS (Branding & Design Preview)
+  // STEP 3 FIELDS (Branding & Design)
   const [primaryColor, setPrimaryColor] = useState('#3b82f6');
   const [secondaryColor, setSecondaryColor] = useState('#1f2937');
   const [backgroundColor, setBackgroundColor] = useState('#ffffff');
@@ -63,6 +54,11 @@ export const Onboarding: React.FC<OnboardingProps> = ({
   const [textColor, setTextColor] = useState('#0f172a');
   const [fontFamily, setFontFamily] = useState('Outfit, Cairo');
   const [templateId, setTemplateId] = useState<'modern' | 'luxury' | 'minimal' | 'fastfood'>('modern');
+
+  // STEP 4 FIELDS (Menu)
+  const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
+  const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
+  const [editingItem, setEditingItem] = useState<{ categoryId: string; item: MenuItem } | null>(null);
 
   // Load initial if exists
   React.useEffect(() => {
@@ -89,69 +85,12 @@ export const Onboarding: React.FC<OnboardingProps> = ({
       setFontFamily(res.branding.fontFamily);
       setTemplateId(res.templateId);
     }
-  }, [restaurantId]);
 
-  // AI color palette extraction from Logo
-  const handleExtractColors = () => {
-    if (!logoUrl) return;
-    
-    // Canvas pixel color extractor
-    const img = new Image();
-    img.crossOrigin = 'Anonymous';
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.drawImage(img, 0, 0);
-      try {
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-        const colorCounts: Record<string, number> = {};
-        for (let i = 0; i < imageData.length; i += 40) {
-          const r = imageData[i];
-          const g = imageData[i+1];
-          const b = imageData[i+2];
-          const a = imageData[i+3];
-          if (a < 128) continue;
-          if (r > 240 && g > 240 && b > 240) continue;
-          if (r < 15 && g < 15 && b < 15) continue;
-          const rgb = `${r},${g},${b}`;
-          colorCounts[rgb] = (colorCounts[rgb] || 0) + 1;
-        }
-        const sorted = Object.entries(colorCounts).sort((a, b) => b[1] - a[1]);
-        if (sorted.length > 0) {
-          const rgb1 = sorted[0][0].split(',').map(Number);
-          const primHex = '#' + rgb1.map(x => x.toString(16).padStart(2, '0')).join('');
-          
-          let secHex = '#1e293b';
-          if (sorted.length > 1) {
-            const rgb2 = sorted[1][0].split(',').map(Number);
-            secHex = '#' + rgb2.map(x => x.toString(16).padStart(2, '0')).join('');
-          }
-          
-          setPrimaryColor(primHex);
-          setButtonColor(primHex);
-          setSecondaryColor(secHex);
-          
-          // Save branding colors to draft DB immediately
-          db.updateRestaurant(restaurantId, {
-            branding: {
-              primaryColor: primHex,
-              secondaryColor: secHex,
-              backgroundColor,
-              buttonColor: primHex,
-              textColor,
-              fontFamily
-            }
-          });
-        }
-      } catch (e) {
-        console.error('Failed to parse colors via canvas', e);
-      }
-    };
-    img.src = logoUrl;
-  };
+    const menuData = db.getMenu(restaurantId);
+    if (menuData && menuData.categories.length > 0) {
+      setMenuCategories(menuData.categories);
+    }
+  }, [restaurantId]);
 
   const handleNextStep = () => {
     // Save current step data to DB
@@ -167,6 +106,23 @@ export const Onboarding: React.FC<OnboardingProps> = ({
       });
     } else if (step === 2) {
       db.updateRestaurant(restaurantId, { logoUrl });
+    } else if (step === 3) {
+      db.updateRestaurant(restaurantId, {
+        templateId,
+        branding: {
+          primaryColor,
+          secondaryColor,
+          backgroundColor,
+          buttonColor,
+          textColor,
+          fontFamily
+        }
+      });
+    } else if (step === 4) {
+      db.updateMenu(restaurantId, {
+        restaurantId,
+        categories: menuCategories
+      });
     }
 
     setStep(step + 1);
@@ -174,40 +130,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({
 
   // Mock File Upload logo
   const triggerLogoUpload = (demoUrl: string) => {
-    setUploadingLogo(true);
-    setTimeout(() => {
-      setLogoUrl(demoUrl);
-      setUploadingLogo(false);
-    }, 1000);
-  };
-
-  // Simulated AI Menu Import Progress
-  const runMenuOcrSimulation = (type: 'pdf' | 'csv' | 'image', name: string) => {
-    setMenuFileType(type);
-    setMenuFileName(name);
-    setAiProcessing(true);
-    setAiProgressStep(1);
-
-    setTimeout(() => {
-      setAiProgressStep(2);
-      setTimeout(() => {
-        setAiProgressStep(3);
-        setTimeout(() => {
-          const items = db.simulateMenuExtraction(type, name);
-          setExtractedCategories(items);
-          setAiProcessing(false);
-        }, 1500);
-      }, 1500);
-    }, 1200);
-  };
-
-  const handleSaveImportedMenu = () => {
-    // Import categories to restaurant's menu
-    db.updateMenu(restaurantId, {
-      restaurantId,
-      categories: extractedCategories
-    });
-    setStep(4);
+    setLogoUrl(demoUrl);
   };
 
   const handleFinishOnboarding = () => {
@@ -227,78 +150,113 @@ export const Onboarding: React.FC<OnboardingProps> = ({
     onOnboardingComplete();
   };
 
-  // Helper edit review menu
-  const editReviewItem = (catIdx: number, itemIdx: number, field: keyof MenuItem, val: any, isAr = false) => {
-    const nextCats = [...extractedCategories];
-    const item = nextCats[catIdx].items[itemIdx];
+  // Menu CRUD for onboarding
+  const saveCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCategory) return;
+
+    const nextCategories = [...menuCategories];
+    const idx = nextCategories.findIndex(c => c.id === editingCategory.id);
     
-    if (field === 'name' || field === 'description') {
-      const bilingual = { ...(item[field] as any) };
-      bilingual[isAr ? 'ar' : 'en'] = val;
-      item[field] = bilingual;
+    if (idx > -1) {
+      nextCategories[idx] = editingCategory;
     } else {
-      (item as any)[field] = val;
+      nextCategories.push({
+        ...editingCategory,
+        id: `cat_${Math.random().toString(36).substr(2, 5)}`,
+        items: [],
+        order: nextCategories.length + 1
+      });
     }
-    
-    setExtractedCategories(nextCats);
+
+    setMenuCategories(nextCategories);
+    setEditingCategory(null);
   };
 
-  const deleteReviewItem = (catIdx: number, itemIdx: number) => {
-    const nextCats = [...extractedCategories];
-    nextCats[catIdx].items.splice(itemIdx, 1);
-    setExtractedCategories(nextCats);
+  const deleteCategory = (catId: string) => {
+    if (window.confirm(language === 'ar' ? 'هل أنت متأكد من حذف هذه الفئة بجميع أطباقها؟' : 'Are you sure you want to delete this category and all its dishes?')) {
+      setMenuCategories(menuCategories.filter(c => c.id !== catId));
+    }
   };
 
-  const addReviewItem = (catIdx: number) => {
-    const nextCats = [...extractedCategories];
-    const newItem: MenuItem = {
-      id: `new_item_${Math.random().toString(36).substr(2, 5)}`,
-      name: { en: 'New Dish', ar: 'طبق جديد' },
-      description: { en: 'Dish description details', ar: 'تفاصيل وصف الطبق' },
-      price: 100,
-      imageUrl: '',
-      isAvailable: true,
-      isHidden: false,
-      variants: [],
-      addons: [],
-      order: nextCats[catIdx].items.length + 1
-    };
-    nextCats[catIdx].items.push(newItem);
-    setExtractedCategories(nextCats);
+  const saveItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem) return;
+
+    const nextCategories = [...menuCategories];
+    const catIdx = nextCategories.findIndex(c => c.id === editingItem.categoryId);
+    if (catIdx === -1) return;
+
+    const cat = nextCategories[catIdx];
+    const itemIdx = cat.items.findIndex(i => i.id === editingItem.item.id);
+
+    if (itemIdx > -1) {
+      cat.items[itemIdx] = editingItem.item;
+    } else {
+      cat.items.push({
+        ...editingItem.item,
+        id: `item_${Math.random().toString(36).substr(2, 5)}`,
+        order: cat.items.length + 1
+      });
+    }
+
+    setMenuCategories(nextCategories);
+    setEditingItem(null);
   };
+
+  const deleteItem = (catId: string, itemId: string) => {
+    if (window.confirm(language === 'ar' ? 'هل أنت متأكد من حذف هذا الطبق؟' : 'Are you sure you want to delete this dish?')) {
+      const nextCategories = menuCategories.map(c => {
+        if (c.id !== catId) return c;
+        return { ...c, items: c.items.filter(i => i.id !== itemId) };
+      });
+      setMenuCategories(nextCategories);
+    }
+  };
+
+  const steps = [
+    { id: 1, label: language === 'ar' ? 'الحساب' : 'Account' },
+    { id: 2, label: language === 'ar' ? 'المطعم' : 'Restaurant' },
+    { id: 3, label: language === 'ar' ? 'التصميم' : 'Design' },
+    { id: 4, label: language === 'ar' ? 'المنيو' : 'Menu' },
+    { id: 5, label: language === 'ar' ? 'معاينة' : 'Preview' },
+    { id: 6, label: language === 'ar' ? 'نشر' : 'Publish' },
+  ];
 
   return (
-    <div className="min-h-screen bg-slate-50 py-12 px-6 flex flex-col justify-between text-slate-900">
+    <div className="min-h-screen bg-zinc-50 py-10 px-6 flex flex-col justify-between text-zinc-900">
       {/* Wizard Header */}
       <div className="max-w-6xl mx-auto w-full mb-8">
         <div className="text-center">
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900">{t('onboardingTitle')}</h2>
-          <p className="text-slate-500 text-xs mt-1 font-medium">BistroFlow {t('appSubtitle')}</p>
+          <h2 className="text-2xl sm:text-3xl font-bold text-zinc-900 tracking-tight">{t('onboardingTitle')}</h2>
+          <p className="text-zinc-500 text-sm mt-1 font-medium">BistroFlow {t('appSubtitle')}</p>
         </div>
 
-        {/* Steps navigation circles */}
-        <div className="flex justify-center items-center gap-2 mt-8 max-w-lg mx-auto">
-          {[1, 2, 3, 4].map((s) => {
-            const isCompleted = step > s;
-            const isActive = step === s;
-            const labels = [t('onboardingStep1'), t('onboardingStep2'), t('onboardingStep3'), t('onboardingStep4')];
+        {/* Steps navigation */}
+        <div className="flex justify-center items-center gap-2 mt-8 max-w-3xl mx-auto">
+          {steps.map((s, idx) => {
+            const isCompleted = step > s.id;
+            const isActive = step === s.id;
+            const isLast = idx === steps.length - 1;
             return (
-              <React.Fragment key={s}>
-                <div className="flex flex-col items-center">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition duration-300 ${
+              <React.Fragment key={s.id}>
+                <div className="flex flex-col items-center min-w-[3.5rem]">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${
                     isCompleted 
-                      ? 'bg-emerald-600 text-white shadow-xs' 
+                      ? 'bg-emerald-600 text-white' 
                       : isActive 
-                        ? 'bg-blue-600 text-white scale-110 shadow-md shadow-blue-500/20' 
-                        : 'bg-slate-200 text-slate-500 border border-slate-300'
+                        ? 'bg-zinc-900 text-white ring-4 ring-zinc-100' 
+                        : 'bg-zinc-100 text-zinc-400 border border-zinc-200'
                   }`}>
-                    {isCompleted ? <Check className="w-4 h-4 text-white" /> : s}
+                    {isCompleted ? <Check className="w-4 h-4" /> : s.id}
                   </div>
-                  <span className={`text-[10px] font-bold mt-1.5 ${isActive ? 'text-blue-600' : 'text-slate-500'}`}>
-                    {labels[s-1]}
+                  <span className={`text-[11px] font-medium mt-2 text-center leading-tight ${isActive ? 'text-zinc-900' : isCompleted ? 'text-emerald-600' : 'text-zinc-400'}`}>
+                    {s.label}
                   </span>
                 </div>
-                {s < 4 && <div className={`flex-1 h-0.5 max-w-16 transition-colors duration-300 ${step > s ? 'bg-emerald-600' : 'bg-slate-200'}`} />}
+                {!isLast && (
+                  <div className={`flex-1 h-px max-w-12 sm:max-w-16 mb-5 transition-colors ${step > s.id ? 'bg-emerald-500' : 'bg-zinc-200'}`} />
+                )}
               </React.Fragment>
             );
           })}
@@ -306,113 +264,95 @@ export const Onboarding: React.FC<OnboardingProps> = ({
       </div>
 
       {/* Main wizard workspace */}
-      <div className="max-w-6xl mx-auto w-full bg-white border border-slate-200 rounded-3xl p-6 sm:p-10 shadow-lg flex-1">
+      <div className="max-w-6xl mx-auto w-full bg-white border border-zinc-200 rounded-2xl p-6 sm:p-10 shadow-sm flex-1">
+        {/* STEP 1: Account */}
         {step === 1 && (
           <div className="animate-fade-in space-y-6">
             <div>
-              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <Building className="w-5 h-5 text-blue-600" />
-                {t('stepInfoTitle')}
+              <h3 className="text-lg font-semibold text-zinc-900 flex items-center gap-2">
+                <Store className="w-5 h-5 text-zinc-500" />
+                {language === 'ar' ? 'معلومات الحساب' : 'Account Information'}
               </h3>
-              <p className="text-xs text-slate-500 mt-1">{t('stepInfoSubtitle')}</p>
+              <p className="text-sm text-zinc-500 mt-1">
+                {language === 'ar' ? 'أدخل اسم مطعمك باللغتين.' : 'Enter your restaurant name in both languages.'}
+              </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* English Inputs */}
-              <div className="space-y-4">
-                <h4 className="text-xs font-black uppercase text-blue-700 tracking-wider">🇬🇧 English Details</h4>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">{t('nameEnLabel')}</label>
-                  <input
-                    type="text"
-                    required
-                    value={nameEn}
-                    onChange={(e) => setNameEn(e.target.value)}
-                    className="input-field"
-                    placeholder="e.g. Bella Italia"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">{t('descEnLabel')}</label>
-                  <textarea
-                    value={descEn}
-                    onChange={(e) => setDescEn(e.target.value)}
-                    rows={3}
-                    className="input-field resize-none"
-                    placeholder="Describe your kitchen style, history, specialties..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">{t('addressEnLabel')}</label>
-                  <input
-                    type="text"
-                    value={addressEn}
-                    onChange={(e) => setAddressEn(e.target.value)}
-                    className="input-field"
-                    placeholder="e.g. 9 Road 15, Maadi, Cairo"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">{t('hoursEnLabel')}</label>
-                  <input
-                    type="text"
-                    value={hoursEn}
-                    onChange={(e) => setHoursEn(e.target.value)}
-                    className="input-field"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 mb-1.5">{t('nameEnLabel')}</label>
+                <input
+                  type="text"
+                  required
+                  value={nameEn}
+                  onChange={(e) => setNameEn(e.target.value)}
+                  className="input-field"
+                  placeholder="e.g. Bella Italia"
+                />
               </div>
-
-              {/* Arabic Inputs */}
-              <div className="space-y-4" dir="rtl">
-                <h4 className="text-xs font-black uppercase text-blue-700 tracking-wider text-left">🇪🇬 التفاصيل بالعربية</h4>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1 text-right">{t('nameArLabel')}</label>
-                  <input
-                    type="text"
-                    required
-                    value={nameAr}
-                    onChange={(e) => setNameAr(e.target.value)}
-                    className="input-field text-right"
-                    placeholder="مثال: بيلا إيطاليا"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1 text-right">{t('descArLabel')}</label>
-                  <textarea
-                    value={descAr}
-                    onChange={(e) => setDescAr(e.target.value)}
-                    rows={3}
-                    className="input-field resize-none text-right"
-                    placeholder="صف تاريخ مطبخك، تخصصاتك، طابع مطعمك..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1 text-right">{t('addressArLabel')}</label>
-                  <input
-                    type="text"
-                    value={addressAr}
-                    onChange={(e) => setAddressAr(e.target.value)}
-                    className="input-field text-right"
-                    placeholder="مثال: ٩ شارع ١٥، المعادي، القاهرة"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1 text-right">{t('hoursArLabel')}</label>
-                  <input
-                    type="text"
-                    value={hoursAr}
-                    onChange={(e) => setHoursAr(e.target.value)}
-                    className="input-field text-right"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 mb-1.5">{t('nameArLabel')}</label>
+                <input
+                  type="text"
+                  required
+                  value={nameAr}
+                  onChange={(e) => setNameAr(e.target.value)}
+                  className="input-field text-right"
+                  placeholder="مثال: بيلا إيطاليا"
+                  dir="rtl"
+                />
               </div>
             </div>
 
-            {/* General contacts */}
-            <div className="border-t border-slate-200 pt-6 grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div className="flex justify-end pt-4">
+              <button
+                type="button"
+                onClick={handleNextStep}
+                disabled={!nameEn || !nameAr}
+                className="btn-primary py-3 px-8 rounded-lg disabled:opacity-40 flex items-center gap-2"
+              >
+                <span>{t('nextBtn')}</span>
+                <ChevronRight className="w-4 h-4 rtl:rotate-180" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 2: Restaurant Info */}
+        {step === 2 && (
+          <div className="animate-fade-in space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold text-zinc-900 flex items-center gap-2">
+                <Building className="w-5 h-5 text-zinc-500" />
+                {t('stepInfoTitle')}
+              </h3>
+              <p className="text-sm text-zinc-500 mt-1">{t('stepInfoSubtitle')}</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">{t('phoneLabel')}</label>
+                <label className="block text-xs font-medium text-zinc-700 mb-1.5">{t('descEnLabel')}</label>
+                <textarea
+                  value={descEn}
+                  onChange={(e) => setDescEn(e.target.value)}
+                  rows={3}
+                  className="input-field resize-none"
+                  placeholder="Describe your kitchen style, history, specialties..."
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 mb-1.5">{t('descArLabel')}</label>
+                <textarea
+                  value={descAr}
+                  onChange={(e) => setDescAr(e.target.value)}
+                  rows={3}
+                  className="input-field resize-none text-right"
+                  placeholder="صف تاريخ مطبخك، تخصصاتك، طابع مطعمك..."
+                  dir="rtl"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 mb-1.5">{t('phoneLabel')}</label>
                 <input
                   type="text"
                   required
@@ -423,7 +363,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">{t('whatsappLabel')}</label>
+                <label className="block text-xs font-medium text-zinc-700 mb-1.5">{t('whatsappLabel')}</label>
                 <input
                   type="text"
                   required
@@ -434,7 +374,47 @@ export const Onboarding: React.FC<OnboardingProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">{t('mapsLabel')}</label>
+                <label className="block text-xs font-medium text-zinc-700 mb-1.5">{t('addressEnLabel')}</label>
+                <input
+                  type="text"
+                  value={addressEn}
+                  onChange={(e) => setAddressEn(e.target.value)}
+                  className="input-field"
+                  placeholder="e.g. 9 Road 15, Maadi, Cairo"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 mb-1.5">{t('addressArLabel')}</label>
+                <input
+                  type="text"
+                  value={addressAr}
+                  onChange={(e) => setAddressAr(e.target.value)}
+                  className="input-field text-right"
+                  placeholder="مثال: ٩ شارع ١٥، المعادي، القاهرة"
+                  dir="rtl"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 mb-1.5">{t('hoursEnLabel')}</label>
+                <input
+                  type="text"
+                  value={hoursEn}
+                  onChange={(e) => setHoursEn(e.target.value)}
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 mb-1.5">{t('hoursArLabel')}</label>
+                <input
+                  type="text"
+                  value={hoursAr}
+                  onChange={(e) => setHoursAr(e.target.value)}
+                  className="input-field text-right"
+                  dir="rtl"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 mb-1.5">{t('mapsLabel')}</label>
                 <input
                   type="text"
                   value={googleMapsLink}
@@ -445,95 +425,10 @@ export const Onboarding: React.FC<OnboardingProps> = ({
               </div>
             </div>
 
-            <div className="flex justify-end pt-4">
-              <button
-                type="button"
-                onClick={handleNextStep}
-                disabled={!nameEn || !nameAr || !phone || !whatsAppNumber}
-                className="btn-primary py-3.5 px-8 rounded-xl disabled:opacity-40 flex items-center gap-2 shadow-md shadow-blue-600/20"
-              >
-                <span>{t('nextBtn')}</span>
-                <ChevronRight className="w-5 h-5 text-white rtl:rotate-180" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {step === 2 && (
-          <div className="animate-fade-in space-y-6">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <ImageIcon className="w-5 h-5 text-blue-600" />
-                {t('stepLogoTitle')}
-              </h3>
-              <p className="text-xs text-slate-500 mt-1">{t('stepLogoSubtitle')}</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-              {/* Uploader Box */}
-              <div className="border-2 border-dashed border-slate-300 rounded-3xl p-10 text-center bg-slate-50">
-                <Upload className="w-10 h-10 text-slate-400 mx-auto mb-4" />
-                <h4 className="font-bold text-sm text-slate-800 mb-1">{t('uploadLogoLabel')}</h4>
-                <p className="text-xs text-slate-500 mb-6">{t('uploadLogoDesc')}</p>
-
-                {/* Choose a preset demo logo */}
-                <div className="space-y-3">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Select Sample Logo File</p>
-                  <div className="flex flex-wrap gap-2 justify-center">
-                    <button
-                      onClick={() => triggerLogoUpload('https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=120&auto=format&fit=crop&q=60')}
-                      className="text-xs bg-white text-slate-700 font-semibold px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 transition shadow-2xs"
-                    >
-                      🍕 Red Italian Pizzeria Logo
-                    </button>
-                    <button
-                      onClick={() => triggerLogoUpload('https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=120&auto=format&fit=crop&q=60')}
-                      className="text-xs bg-white text-slate-700 font-semibold px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 transition shadow-2xs"
-                    >
-                      🍔 Yellow Burger Joint Logo
-                    </button>
-                    <button
-                      onClick={() => triggerLogoUpload('https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=120&auto=format&fit=crop&q=60')}
-                      className="text-xs bg-white text-slate-700 font-semibold px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 transition shadow-2xs"
-                    >
-                      🍣 Green Sushi House Logo
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Logo Preview Panel */}
-              <div className="bg-slate-50 p-8 rounded-3xl text-center border border-slate-200 flex flex-col justify-center items-center h-64 shadow-2xs">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">
-                  {t('logoPreview')}
-                </span>
-
-                {uploadingLogo ? (
-                  <div className="flex flex-col items-center gap-2">
-                    <RefreshCw className="w-8 h-8 text-blue-600 animate-spin" />
-                    <span className="text-xs text-slate-500">Processing image...</span>
-                  </div>
-                ) : logoUrl ? (
-                  <div className="space-y-4">
-                    <img 
-                      src={logoUrl} 
-                      alt="Logo preview" 
-                      className="w-24 h-24 object-cover rounded-full border-4 border-white shadow-lg"
-                    />
-                    <div className="text-xs text-slate-600 font-bold">{t('appName')} Brand Core</div>
-                  </div>
-                ) : (
-                  <div className="text-slate-400 text-xs italic">
-                    No logo uploaded yet. Select a sample above to continue.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-between pt-6 border-t border-slate-200">
+            <div className="flex justify-between pt-6 border-t border-zinc-100">
               <button 
                 onClick={() => setStep(1)} 
-                className="btn-secondary py-3 px-6 rounded-xl flex items-center gap-1"
+                className="btn-secondary py-3 px-6 rounded-lg flex items-center gap-1"
               >
                 <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
                 <span>{t('backBtn')}</span>
@@ -541,280 +436,66 @@ export const Onboarding: React.FC<OnboardingProps> = ({
               
               <button
                 onClick={handleNextStep}
-                disabled={!logoUrl}
-                className="btn-primary py-3.5 px-8 rounded-xl disabled:opacity-40 flex items-center gap-2 shadow-md shadow-blue-600/20"
+                disabled={!phone || !whatsAppNumber}
+                className="btn-primary py-3 px-8 rounded-lg disabled:opacity-40 flex items-center gap-2"
               >
                 <span>{t('nextBtn')}</span>
-                <ChevronRight className="w-5 h-5 text-white rtl:rotate-180" />
+                <ChevronRight className="w-4 h-4 rtl:rotate-180" />
               </button>
             </div>
           </div>
         )}
 
+        {/* STEP 3: Design & Branding */}
         {step === 3 && (
           <div className="animate-fade-in space-y-6">
             <div>
-              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <FileText className="w-5 h-5 text-blue-600" />
-                {t('stepMenuTitle')}
+              <h3 className="text-lg font-semibold text-zinc-900 flex items-center gap-2">
+                <Palette className="w-5 h-5 text-zinc-500" />
+                {language === 'ar' ? 'التصميم والهوية' : 'Design & Branding'}
               </h3>
-              <p className="text-xs text-slate-500 mt-1">{t('stepMenuSubtitle')}</p>
-            </div>
-
-            {/* AI OCR Simulator */}
-            {!menuFileType && !aiProcessing && (
-              <div className="max-w-2xl mx-auto space-y-6 text-center py-10">
-                <h4 className="text-sm font-bold text-slate-800">{t('menuUploadType')}</h4>
-                
-                <div className="grid grid-cols-3 gap-4">
-                  <button
-                    onClick={() => runMenuOcrSimulation('pdf', 'menu_draft_2026.pdf')}
-                    className="bg-white p-6 rounded-2xl hover:border-blue-500 hover:bg-blue-50 transition border border-slate-200 flex flex-col items-center gap-3 shadow-2xs"
-                  >
-                    <FileText className="w-8 h-8 text-blue-600" />
-                    <span className="text-xs font-bold text-slate-800">{t('uploadPdfBtn')}</span>
-                  </button>
-                  <button
-                    onClick={() => runMenuOcrSimulation('csv', 'menu_spreadsheet.csv')}
-                    className="bg-white p-6 rounded-2xl hover:border-purple-500 hover:bg-purple-50 transition border border-slate-200 flex flex-col items-center gap-3 shadow-2xs"
-                  >
-                    <Layers className="w-8 h-8 text-purple-600" />
-                    <span className="text-xs font-bold text-slate-800">{t('uploadCsvBtn')}</span>
-                  </button>
-                  <button
-                    onClick={() => runMenuOcrSimulation('image', 'menu_photo.jpg')}
-                    className="bg-white p-6 rounded-2xl hover:border-emerald-500 hover:bg-emerald-50 transition border border-slate-200 flex flex-col items-center gap-3 shadow-2xs"
-                  >
-                    <ImageIcon className="w-8 h-8 text-emerald-600" />
-                    <span className="text-xs font-bold text-slate-800">{t('uploadImgBtn')}</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* AI Scanning progress updates */}
-            {aiProcessing && (
-              <div className="max-w-md mx-auto py-12 text-center space-y-6">
-                <RefreshCw className="w-10 h-10 text-blue-600 animate-spin mx-auto mb-4" />
-                <h4 className="font-bold text-slate-900">{t('aiRunning')}</h4>
-                
-                <div className="space-y-3 text-xs text-left max-w-xs mx-auto">
-                  <div className={`flex items-center gap-2 ${aiProgressStep >= 1 ? 'text-blue-600 font-bold' : 'text-slate-400'}`}>
-                    <div className={`w-2 h-2 rounded-full ${aiProgressStep >= 1 ? 'bg-blue-600 animate-ping' : 'bg-slate-300'}`} />
-                    <span>{t('aiStep1')}</span>
-                  </div>
-                  <div className={`flex items-center gap-2 ${aiProgressStep >= 2 ? 'text-purple-600 font-bold' : 'text-slate-400'}`}>
-                    <div className={`w-2 h-2 rounded-full ${aiProgressStep >= 2 ? 'bg-purple-600 animate-ping' : 'bg-slate-300'}`} />
-                    <span>{t('aiStep2')}</span>
-                  </div>
-                  <div className={`flex items-center gap-2 ${aiProgressStep >= 3 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
-                    <div className={`w-2 h-2 rounded-full ${aiProgressStep >= 3 ? 'bg-emerald-600 animate-ping' : 'bg-slate-300'}`} />
-                    <span>{t('aiStep3')}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* OCR Review Table */}
-            {extractedCategories.length > 0 && !aiProcessing && (
-              <div className="space-y-6 animate-fade-in">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h4 className="font-bold text-slate-900 text-md">{t('reviewMenuTitle')}</h4>
-                    <p className="text-xs text-slate-500 mt-0.5">{t('reviewMenuSubtitle')}</p>
-                  </div>
-                  <span className="bg-slate-100 text-slate-700 border border-slate-200 text-xs font-semibold px-3 py-1 rounded-xl">
-                    📄 File: {menuFileName}
-                  </span>
-                </div>
-
-                <div className="space-y-6 max-h-[50vh] overflow-y-auto pr-2">
-                  {extractedCategories.map((cat, cIdx) => (
-                    <div key={cat.id} className="bg-slate-50 border border-slate-200 p-6 rounded-2xl">
-                      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center mb-4 border-b border-slate-200 pb-3">
-                        <div className="flex gap-2 w-full sm:w-auto">
-                          <input
-                            type="text"
-                            value={cat.name.en}
-                            onChange={(e) => {
-                              const next = [...extractedCategories];
-                              next[cIdx].name.en = e.target.value;
-                              setExtractedCategories(next);
-                            }}
-                            className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-900"
-                            placeholder="Category Name (EN)"
-                          />
-                          <input
-                            type="text"
-                            value={cat.name.ar}
-                            onChange={(e) => {
-                              const next = [...extractedCategories];
-                              next[cIdx].name.ar = e.target.value;
-                              setExtractedCategories(next);
-                            }}
-                            className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-900 text-right"
-                            placeholder="اسم الفئة (AR)"
-                            dir="rtl"
-                          />
-                        </div>
-                        <button
-                          onClick={() => {
-                            const next = [...extractedCategories];
-                            next.splice(cIdx, 1);
-                            setExtractedCategories(next);
-                          }}
-                          className="text-red-600 hover:text-red-700 text-xs font-semibold flex items-center gap-1"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          <span>Delete Category</span>
-                        </button>
-                      </div>
-
-                      {/* Items loop */}
-                      <div className="space-y-3">
-                        {cat.items.map((item, iIdx) => (
-                          <div key={item.id} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
-                            <div className="sm:col-span-3 flex gap-2">
-                              <input
-                                type="text"
-                                value={item.name.en}
-                                onChange={(e) => editReviewItem(cIdx, iIdx, 'name', e.target.value)}
-                                className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs text-slate-900 font-semibold w-full"
-                                placeholder="Dish Name (EN)"
-                              />
-                            </div>
-                            <div className="sm:col-span-3 flex gap-2">
-                              <input
-                                type="text"
-                                value={item.name.ar}
-                                onChange={(e) => editReviewItem(cIdx, iIdx, 'name', e.target.value, true)}
-                                className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs text-slate-900 font-semibold text-right w-full"
-                                placeholder="اسم الطبق (AR)"
-                                dir="rtl"
-                              />
-                            </div>
-                            <div className="sm:col-span-3">
-                              <input
-                                type="text"
-                                value={item.description.en}
-                                onChange={(e) => editReviewItem(cIdx, iIdx, 'description', e.target.value)}
-                                className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs text-slate-600 w-full"
-                                placeholder="Description (EN)"
-                              />
-                            </div>
-                            <div className="sm:col-span-2">
-                              <input
-                                type="number"
-                                value={item.price}
-                                onChange={(e) => editReviewItem(cIdx, iIdx, 'price', Number(e.target.value))}
-                                className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs text-blue-600 font-bold w-full"
-                                placeholder="Price"
-                              />
-                            </div>
-                            <div className="sm:col-span-1 text-center">
-                              <button
-                                onClick={() => deleteReviewItem(cIdx, iIdx)}
-                                className="text-red-500 hover:text-red-700 p-1"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                        
-                        <button
-                          onClick={() => addReviewItem(cIdx)}
-                          className="text-xs text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1 mt-3"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>{t('addItem')}</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-
-                  <button
-                    onClick={() => {
-                      const next = [...extractedCategories];
-                      next.push({
-                        id: `cat_new_${Math.random().toString(36).substr(2, 5)}`,
-                        name: { en: 'New Category', ar: 'فئة جديدة' },
-                        order: next.length + 1,
-                        items: []
-                      });
-                      setExtractedCategories(next);
-                    }}
-                    className="w-full border border-dashed border-slate-300 py-3 rounded-2xl text-xs font-bold text-slate-600 hover:border-slate-400 flex items-center justify-center gap-1"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>{t('addCategory')}</span>
-                  </button>
-                </div>
-
-                <div className="flex justify-end pt-4 border-t border-slate-200">
-                  <button
-                    onClick={handleSaveImportedMenu}
-                    className="btn-primary py-3.5 px-8 rounded-xl flex items-center gap-2 shadow-md shadow-blue-600/20"
-                  >
-                    <Check className="w-5 h-5 text-white" />
-                    <span>{t('saveImportBtn')}</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Back button */}
-            {!aiProcessing && extractedCategories.length === 0 && (
-              <div className="flex justify-between pt-6 border-t border-slate-200">
-                <button 
-                  onClick={() => setStep(2)} 
-                  className="btn-secondary py-3 px-6 rounded-xl flex items-center gap-1"
-                >
-                  <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
-                  <span>{t('backBtn')}</span>
-                </button>
-                
-                <button
-                  onClick={() => setStep(4)}
-                  className="btn-secondary py-3.5 px-8 rounded-xl flex items-center gap-2"
-                >
-                  <span>Skip Menu Import</span>
-                  <ChevronRight className="w-4 h-4 text-slate-500 rtl:rotate-180" />
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {step === 4 && (
-          <div className="animate-fade-in space-y-6">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <Palette className="w-5 h-5 text-blue-600" />
-                {language === 'ar' ? 'تصميم وهوية الموقع' : 'Customization & Branding'}
-              </h3>
-              <p className="text-xs text-slate-500 mt-1">
-                {language === 'ar' ? 'حدد قالباً، خصص الألوان، وشاهد معاينة حية لموقع مطعمك.' : 'Configure theme colors, layout template, and check your live responsive page.'}
+              <p className="text-sm text-zinc-500 mt-1">
+                {language === 'ar' ? 'اختر قالباً وحدد ألوان علامتك التجارية.' : 'Choose a template and set your brand colors.'}
               </p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
               {/* Branding Sidebar inputs */}
               <div className="lg:col-span-5 space-y-6">
-                {/* AI Color generator */}
-                {logoUrl && (
-                  <button
-                    onClick={handleExtractColors}
-                    className="w-full bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition shadow-2xs"
-                  >
-                    <Sparkles className="w-4 h-4 text-blue-600" />
-                    <span>{t('aiColorBtn')}</span>
-                  </button>
-                )}
+                {/* Logo upload */}
+                <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-6">
+                  <h4 className="text-xs font-semibold text-zinc-900 uppercase tracking-wider mb-4">{t('stepLogoTitle')}</h4>
+                  <div className="flex items-center gap-4 mb-4">
+                    {logoUrl ? (
+                      <img src={logoUrl} alt="Logo" className="w-16 h-16 object-cover rounded-xl border border-zinc-200" />
+                    ) : (
+                      <div className="w-16 h-16 rounded-xl bg-zinc-200 flex items-center justify-center">
+                        <Upload className="w-6 h-6 text-zinc-400" />
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <p className="text-xs text-zinc-500 mb-2">{t('uploadLogoDesc')}</p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => triggerLogoUpload('https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=120&auto=format&fit=crop&q=60')}
+                          className="text-xs bg-white text-zinc-700 font-medium px-3 py-1.5 rounded-lg border border-zinc-200 hover:bg-zinc-100 transition"
+                        >
+                          🍕 Pizza Logo
+                        </button>
+                        <button
+                          onClick={() => triggerLogoUpload('https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=120&auto=format&fit=crop&q=60')}
+                          className="text-xs bg-white text-zinc-700 font-medium px-3 py-1.5 rounded-lg border border-zinc-200 hover:bg-zinc-100 transition"
+                        >
+                          🍔 Burger Logo
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-                {/* Theme Selector */}
+                {/* Template Selector */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-zinc-900 uppercase tracking-wider mb-2">
                     {language === 'ar' ? 'قالب المخطط' : 'Choose Website Template'}
                   </label>
                   <div className="grid grid-cols-2 gap-2">
@@ -829,10 +510,10 @@ export const Onboarding: React.FC<OnboardingProps> = ({
                         <button
                           key={tpl.id}
                           onClick={() => setTemplateId(tpl.id as any)}
-                          className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition text-left ${
+                          className={`py-2.5 px-3 rounded-lg border text-xs font-medium transition text-left ${
                             isSel 
-                              ? 'border-blue-600 bg-blue-50 text-blue-700 shadow-2xs' 
-                              : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                              ? 'border-zinc-900 bg-zinc-900 text-white' 
+                              : 'border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700'
                           }`}
                         >
                           {tpl.name}
@@ -845,8 +526,8 @@ export const Onboarding: React.FC<OnboardingProps> = ({
                 {/* Color pickers */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">{t('colorPrimary')}</label>
-                    <div className="flex gap-2 items-center bg-white border border-slate-300 rounded-xl p-1 shadow-2xs">
+                    <label className="block text-xs font-medium text-zinc-700 mb-1">{t('colorPrimary')}</label>
+                    <div className="flex gap-2 items-center bg-white border border-zinc-200 rounded-lg p-1">
                       <input 
                         type="color" 
                         value={primaryColor} 
@@ -856,53 +537,27 @@ export const Onboarding: React.FC<OnboardingProps> = ({
                         }}
                         className="w-8 h-8 cursor-pointer border-none bg-transparent"
                       />
-                      <span className="text-[10px] font-mono font-bold text-slate-700">{primaryColor}</span>
+                      <span className="text-[10px] font-mono font-medium text-zinc-700">{primaryColor}</span>
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">{t('colorSecondary')}</label>
-                    <div className="flex gap-2 items-center bg-white border border-slate-300 rounded-xl p-1 shadow-2xs">
+                    <label className="block text-xs font-medium text-zinc-700 mb-1">{t('colorSecondary')}</label>
+                    <div className="flex gap-2 items-center bg-white border border-zinc-200 rounded-lg p-1">
                       <input 
                         type="color" 
                         value={secondaryColor} 
                         onChange={(e) => setSecondaryColor(e.target.value)}
                         className="w-8 h-8 cursor-pointer border-none bg-transparent"
                       />
-                      <span className="text-[10px] font-mono font-bold text-slate-700">{secondaryColor}</span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">{t('colorBackground')}</label>
-                    <div className="flex gap-2 items-center bg-white border border-slate-300 rounded-xl p-1 shadow-2xs">
-                      <input 
-                        type="color" 
-                        value={backgroundColor} 
-                        onChange={(e) => setBackgroundColor(e.target.value)}
-                        className="w-8 h-8 cursor-pointer border-none bg-transparent"
-                      />
-                      <span className="text-[10px] font-mono font-bold text-slate-700">{backgroundColor}</span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">{t('colorText')}</label>
-                    <div className="flex gap-2 items-center bg-white border border-slate-300 rounded-xl p-1 shadow-2xs">
-                      <input 
-                        type="color" 
-                        value={textColor} 
-                        onChange={(e) => setTextColor(e.target.value)}
-                        className="w-8 h-8 cursor-pointer border-none bg-transparent"
-                      />
-                      <span className="text-[10px] font-mono font-bold text-slate-700">{textColor}</span>
+                      <span className="text-[10px] font-mono font-medium text-zinc-700">{secondaryColor}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Typography fonts selection */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">{t('fontLabel')}</label>
+                  <label className="block text-xs font-medium text-zinc-700 mb-1.5">{t('fontLabel')}</label>
                   <select
                     value={fontFamily}
                     onChange={(e) => setFontFamily(e.target.value)}
@@ -915,22 +570,21 @@ export const Onboarding: React.FC<OnboardingProps> = ({
                 </div>
               </div>
 
-              {/* Dynamic Live Site Preview Mockup */}
+              {/* Live Preview */}
               <div className="lg:col-span-7">
-                <div className="border border-slate-300 rounded-3xl overflow-hidden h-[450px] shadow-lg relative bg-white">
-                  <div className="bg-slate-100 border-b border-slate-200 px-4 py-2 flex items-center justify-between text-xs text-slate-600">
+                <div className="border border-zinc-200 rounded-xl overflow-hidden h-[450px] shadow-sm relative bg-white">
+                  <div className="bg-zinc-50 border-b border-zinc-200 px-4 py-2 flex items-center justify-between text-xs text-zinc-600">
                     <span className="flex items-center gap-1.5">
                       <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
                       <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
                       <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
                     </span>
-                    <span className="font-mono text-[10px] bg-white border border-slate-200 px-3 py-1 rounded-md text-slate-600 w-64 truncate text-center font-bold">
-                      bellaitalia.bistroflow.com
+                    <span className="font-mono text-[10px] bg-white border border-zinc-200 px-3 py-1 rounded-md text-zinc-600 w-64 truncate text-center font-medium">
+                      {nameEn.toLowerCase().replace(/[^a-z0-9]/g, '') || 'restaurant'}.bistroflow.com
                     </span>
-                    <span className="text-[10px] text-emerald-600 font-bold">● Active Draft</span>
+                    <span className="text-[10px] text-emerald-600 font-medium">● Active Draft</span>
                   </div>
                   
-                  {/* Embedded Customizer render frame */}
                   <div className="h-[410px] overflow-y-auto">
                     <TemplateWrapper 
                       restaurantId={restaurantId} 
@@ -942,21 +596,458 @@ export const Onboarding: React.FC<OnboardingProps> = ({
               </div>
             </div>
 
-            <div className="flex justify-between pt-6 border-t border-slate-200">
+            <div className="flex justify-between pt-6 border-t border-zinc-100">
               <button 
-                onClick={() => setStep(3)} 
-                className="btn-secondary py-3 px-6 rounded-xl flex items-center gap-1"
+                onClick={() => setStep(2)} 
+                className="btn-secondary py-3 px-6 rounded-lg flex items-center gap-1"
               >
                 <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
                 <span>{t('backBtn')}</span>
               </button>
               
               <button
-                onClick={handleFinishOnboarding}
-                className="btn-primary py-3.5 px-8 rounded-xl flex items-center gap-2 shadow-md shadow-blue-600/20"
+                onClick={handleNextStep}
+                className="btn-primary py-3 px-8 rounded-lg flex items-center gap-2"
               >
-                <Check className="w-5 h-5 text-white" />
-                <span>{t('finishBtn')}</span>
+                <span>{t('nextBtn')}</span>
+                <ChevronRight className="w-4 h-4 rtl:rotate-180" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 4: Menu */}
+        {step === 4 && (
+          <div className="animate-fade-in space-y-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-semibold text-zinc-900 flex items-center gap-2">
+                  <UtensilsCrossed className="w-5 h-5 text-zinc-500" />
+                  {language === 'ar' ? 'أضف قائمتك' : 'Add Your Menu'}
+                </h3>
+                <p className="text-sm text-zinc-500 mt-1">
+                  {language === 'ar' ? 'أضف الفئات والأطباق يدوياً.' : 'Add categories and dishes manually.'}
+                </p>
+              </div>
+              <button
+                onClick={() => setEditingCategory({ id: '', name: { en: '', ar: '' }, order: menuCategories.length + 1, items: [] })}
+                className="btn-primary py-2 px-4 rounded-lg text-sm flex items-center gap-1"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{t('addCategory')}</span>
+              </button>
+            </div>
+
+            {menuCategories.length === 0 ? (
+              <div className="bg-zinc-50 p-12 rounded-xl border border-zinc-200 text-center text-zinc-500 text-sm">
+                {language === 'ar' ? 'لا توجد فئات بعد. أنشئ فئة للبدء بإضافة الأطباق.' : 'No categories yet. Create a category to start adding dishes.'}
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {menuCategories.map((cat) => (
+                  <div key={cat.id} className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-zinc-100 pb-4 mb-4 gap-4">
+                      <div>
+                        <h3 className="text-sm font-semibold text-zinc-900 flex items-center gap-2">
+                          {cat.name.en || cat.name.ar}
+                        </h3>
+                        <p className="text-xs text-zinc-400 mt-0.5">
+                          {cat.items.length} {language === 'ar' ? 'أطباق' : 'items'}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <button
+                          onClick={() => setEditingCategory(cat)}
+                          className="bg-zinc-100 hover:bg-zinc-200 text-zinc-600 text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5"
+                        >
+                          <span>Rename</span>
+                        </button>
+                        <button
+                          onClick={() => deleteCategory(cat.id)}
+                          className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Delete</span>
+                        </button>
+                        <button
+                          onClick={() => setEditingItem({
+                            categoryId: cat.id,
+                            item: {
+                              id: '',
+                              name: { en: '', ar: '' },
+                              description: { en: '', ar: '' },
+                              price: 100,
+                              imageUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&auto=format&fit=crop&q=80',
+                              isAvailable: true,
+                              isHidden: false,
+                              variants: [],
+                              addons: [],
+                              order: cat.items.length + 1
+                            }
+                          })}
+                          className="btn-primary py-1.5 px-3 rounded-lg text-xs flex items-center gap-1.5 ml-auto sm:ml-0"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>{t('addItem')}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {cat.items.length === 0 ? (
+                      <p className="text-xs text-zinc-400 italic py-4">
+                        {language === 'ar' ? 'لا توجد أطباق في هذه الفئة بعد.' : 'No dishes added to this category yet.'}
+                      </p>
+                    ) : (
+                      <div className="grid grid-cards">
+                        {cat.items.map((item) => (
+                          <div key={item.id} className="bg-zinc-50 p-4 border border-zinc-200 rounded-xl flex flex-col justify-between">
+                            <div className="flex gap-3">
+                              {item.imageUrl && (
+                                <img src={item.imageUrl} alt={item.name.en} className="w-14 h-14 object-cover rounded-lg shrink-0 border border-zinc-200" />
+                              )}
+                              <div className="flex-1">
+                                <h4 className="font-semibold text-xs text-zinc-900">{item.name.en || item.name.ar}</h4>
+                                <p className="text-[10px] text-zinc-500 mt-1 line-clamp-2">{item.description.en || item.description.ar}</p>
+                                <div className="text-xs font-semibold text-zinc-900 mt-2">{item.price} {t('currency')}</div>
+                              </div>
+                            </div>
+
+                            <div className="border-t border-zinc-200/80 pt-3 mt-3 flex items-center justify-between gap-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  onClick={() => setEditingItem({ categoryId: cat.id, item })}
+                                  className="text-[10px] bg-zinc-100 hover:bg-zinc-200 text-zinc-600 px-2 py-1 rounded"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => deleteItem(cat.id, item.id)}
+                                  className="text-[10px] bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 px-2 py-1 rounded"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Category Modal */}
+            {editingCategory && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 animate-fade-in">
+                <form onSubmit={saveCategory} className="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl relative space-y-4">
+                  <h3 className="text-md font-semibold text-zinc-900">
+                    {editingCategory.id ? 'Edit Category' : 'Create Category'}
+                  </h3>
+                  
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-700 mb-1">{t('categoryNameEn')}</label>
+                    <input
+                      type="text"
+                      required
+                      value={editingCategory.name.en}
+                      onChange={(e) => setEditingCategory({
+                        ...editingCategory,
+                        name: { ...editingCategory.name, en: e.target.value }
+                      })}
+                      className="input-field"
+                      placeholder="e.g. Italian Pizzas"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-700 mb-1">{t('categoryNameAr')}</label>
+                    <input
+                      type="text"
+                      required
+                      value={editingCategory.name.ar}
+                      onChange={(e) => setEditingCategory({
+                        ...editingCategory,
+                        name: { ...editingCategory.name, ar: e.target.value }
+                      })}
+                      className="input-field text-right"
+                      placeholder="مثال: بيتزا إيطالية"
+                      dir="rtl"
+                    />
+                  </div>
+
+                  <div className="flex gap-2 justify-end pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setEditingCategory(null)}
+                      className="bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-4 py-2 rounded-lg text-xs font-medium"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn-primary py-2 px-4 rounded-lg text-xs"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* Menu Item Modal */}
+            {editingItem && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 animate-fade-in max-h-screen overflow-y-auto">
+                <form onSubmit={saveItem} className="bg-white rounded-xl w-full max-w-lg p-6 shadow-2xl relative space-y-4 max-h-[90vh] overflow-y-auto">
+                  <h3 className="text-md font-semibold text-zinc-900">
+                    {editingItem.item.id ? 'Edit Dish details' : 'Add New Dish'}
+                  </h3>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-700 mb-1">{t('itemNameEn')}</label>
+                      <input
+                        type="text"
+                        required
+                        value={editingItem.item.name.en}
+                        onChange={(e) => setEditingItem({
+                          ...editingItem,
+                          item: {
+                            ...editingItem.item,
+                            name: { ...editingItem.item.name, en: e.target.value }
+                          }
+                        })}
+                        className="input-field"
+                        placeholder="e.g. Margherita DOC"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-700 mb-1">{t('itemNameAr')}</label>
+                      <input
+                        type="text"
+                        required
+                        value={editingItem.item.name.ar}
+                        onChange={(e) => setEditingItem({
+                          ...editingItem,
+                          item: {
+                            ...editingItem.item,
+                            name: { ...editingItem.item.name, ar: e.target.value }
+                          }
+                        })}
+                        className="input-field text-right"
+                        placeholder="مثال: بيتزا مارجريتا"
+                        dir="rtl"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-700 mb-1">{t('itemDescEn')}</label>
+                      <textarea
+                        value={editingItem.item.description.en}
+                        onChange={(e) => setEditingItem({
+                          ...editingItem,
+                          item: {
+                            ...editingItem.item,
+                            description: { ...editingItem.item.description, en: e.target.value }
+                          }
+                        })}
+                        rows={2}
+                        className="input-field resize-none"
+                        placeholder="Tomato, mozzarella, basil..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-700 mb-1 text-right">{t('itemDescAr')}</label>
+                      <textarea
+                        value={editingItem.item.description.ar}
+                        onChange={(e) => setEditingItem({
+                          ...editingItem,
+                          item: {
+                            ...editingItem.item,
+                            description: { ...editingItem.item.description, ar: e.target.value }
+                          }
+                        })}
+                        rows={2}
+                        className="input-field resize-none text-right"
+                        placeholder="طماطم، موزاريلا، ريحان..."
+                        dir="rtl"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-700 mb-1">{t('itemPrice')}</label>
+                      <input
+                        type="number"
+                        required
+                        value={editingItem.item.price}
+                        onChange={(e) => setEditingItem({
+                          ...editingItem,
+                          item: {
+                            ...editingItem.item,
+                            price: Number(e.target.value)
+                          }
+                        })}
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-700 mb-1">{t('itemImage')}</label>
+                      <input
+                        type="text"
+                        value={editingItem.item.imageUrl}
+                        onChange={(e) => setEditingItem({
+                          ...editingItem,
+                          item: {
+                            ...editingItem.item,
+                            imageUrl: e.target.value
+                          }
+                        })}
+                        className="input-field"
+                        placeholder="Image URL"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 justify-end pt-4 border-t border-zinc-100">
+                    <button
+                      type="button"
+                      onClick={() => setEditingItem(null)}
+                      className="bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-4 py-2 rounded-lg text-xs font-medium"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn-primary py-2 px-4 rounded-lg text-xs"
+                    >
+                      Save Item
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            <div className="flex justify-between pt-6 border-t border-zinc-100">
+              <button 
+                onClick={() => setStep(3)} 
+                className="btn-secondary py-3 px-6 rounded-lg flex items-center gap-1"
+              >
+                <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
+                <span>{t('backBtn')}</span>
+              </button>
+              
+              <button
+                onClick={handleNextStep}
+                className="btn-primary py-3 px-8 rounded-lg flex items-center gap-2"
+              >
+                <span>{t('nextBtn')}</span>
+                <ChevronRight className="w-4 h-4 rtl:rotate-180" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 5: Preview */}
+        {step === 5 && (
+          <div className="animate-fade-in space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold text-zinc-900 flex items-center gap-2">
+                <Eye className="w-5 h-5 text-zinc-500" />
+                {language === 'ar' ? 'معاينة موقعك' : 'Preview Your Website'}
+              </h3>
+              <p className="text-sm text-zinc-500 mt-1">
+                {language === 'ar' ? 'هكذا سيرى عملاؤك موقعك.' : 'This is how your customers will see your website.'}
+              </p>
+            </div>
+
+            <div className="border border-zinc-200 rounded-xl overflow-hidden h-[500px] shadow-sm relative bg-white">
+              <div className="bg-zinc-50 border-b border-zinc-200 px-4 py-2 flex items-center justify-between text-xs text-zinc-600">
+                <span className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+                </span>
+                <span className="font-mono text-[10px] bg-white border border-zinc-200 px-3 py-1 rounded-md text-zinc-600 w-64 truncate text-center font-medium">
+                  {nameEn.toLowerCase().replace(/[^a-z0-9]/g, '') || 'restaurant'}.bistroflow.com
+                </span>
+                <span className="text-[10px] text-emerald-600 font-medium">● Preview</span>
+              </div>
+              
+              <div className="h-[460px] overflow-y-auto">
+                <TemplateWrapper 
+                  restaurantId={restaurantId} 
+                  isPreview={true} 
+                  onClosePreview={() => {}}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-between pt-6 border-t border-zinc-100">
+              <button 
+                onClick={() => setStep(4)} 
+                className="btn-secondary py-3 px-6 rounded-lg flex items-center gap-1"
+              >
+                <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
+                <span>{t('backBtn')}</span>
+              </button>
+              
+              <button
+                onClick={handleNextStep}
+                className="btn-primary py-3 px-8 rounded-lg flex items-center gap-2"
+              >
+                <span>{t('nextBtn')}</span>
+                <ChevronRight className="w-4 h-4 rtl:rotate-180" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 6: Publish */}
+        {step === 6 && (
+          <div className="animate-fade-in space-y-6 text-center py-10">
+            <div className="w-16 h-16 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <Rocket className="w-8 h-8 text-emerald-600" />
+            </div>
+            <h3 className="text-2xl font-bold text-zinc-900">
+              {language === 'ar' ? 'جاهز للنشر!' : 'Ready to Publish!'}
+            </h3>
+            <p className="text-zinc-500 text-sm max-w-md mx-auto">
+              {language === 'ar' 
+                ? 'موقعك جاهز. انشر الآن ليتمكن عملاؤك من تصفحه والطلب.' 
+                : 'Your website is ready. Publish now so your customers can view it and order.'}
+            </p>
+
+            <div className="max-w-md mx-auto bg-zinc-50 border border-zinc-200 rounded-xl p-6 text-left space-y-3">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-zinc-500">{language === 'ar' ? 'اسم المطعم' : 'Restaurant Name'}</span>
+                <span className="font-semibold text-zinc-900">{nameEn || nameAr}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-zinc-500">{language === 'ar' ? 'القالب' : 'Template'}</span>
+                <span className="font-semibold text-zinc-900">{templateId}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-zinc-500">{language === 'ar' ? 'الفئات' : 'Categories'}</span>
+                <span className="font-semibold text-zinc-900">{menuCategories.length}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-zinc-500">{language === 'ar' ? 'الأطباق' : 'Dishes'}</span>
+                <span className="font-semibold text-zinc-900">{menuCategories.reduce((acc, c) => acc + c.items.length, 0)}</span>
+              </div>
+            </div>
+
+            <div className="flex justify-center pt-6">
+              <button
+                onClick={handleFinishOnboarding}
+                className="btn-primary py-3.5 px-10 rounded-lg flex items-center gap-2 shadow-lg shadow-zinc-900/10"
+              >
+                <Rocket className="w-4 h-4" />
+                <span>{language === 'ar' ? 'انشر موقعي' : 'Publish My Website'}</span>
               </button>
             </div>
           </div>

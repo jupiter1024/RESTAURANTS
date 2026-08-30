@@ -31,7 +31,7 @@ export interface Restaurant {
   whatsAppNumber: string;
   logoUrl: string;
   heroImageUrl: string;
-  pricingPlan: 'starter' | 'professional';
+  pricingPlan: 'website' | 'orders' | 'integrated';
   domain: string;
   published: boolean;
   templateId: 'modern' | 'luxury' | 'minimal' | 'fastfood';
@@ -180,7 +180,7 @@ const SEED_DATA: DatabaseSchema = {
       whatsAppNumber: '201001234567',
       logoUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=120&auto=format&fit=crop&q=60',
       heroImageUrl: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=1200&auto=format&fit=crop&q=80',
-      pricingPlan: 'professional',
+      pricingPlan: 'orders',
       domain: 'bellaitalia.bistroflow.com',
       published: true,
       templateId: 'luxury',
@@ -218,7 +218,7 @@ const SEED_DATA: DatabaseSchema = {
       whatsAppNumber: '201119876543',
       logoUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=120&auto=format&fit=crop&q=60',
       heroImageUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=1200&auto=format&fit=crop&q=80',
-      pricingPlan: 'starter',
+      pricingPlan: 'website',
       domain: 'burgerloft.bistroflow.com',
       published: true,
       templateId: 'fastfood',
@@ -624,6 +624,13 @@ class MockDatabase {
         const parsed = JSON.parse(stored);
         // Migrate: add offers if missing from stored DB
         if (!parsed.offers) parsed.offers = SEED_DATA.offers;
+        // Migrate legacy pricing plan names
+        if (parsed.restaurants) {
+          Object.values(parsed.restaurants).forEach((r: any) => {
+            if (r.pricingPlan === 'starter') r.pricingPlan = 'website';
+            if (r.pricingPlan === 'professional') r.pricingPlan = 'orders';
+          });
+        }
         this.db = parsed;
       } catch (e) {
         this.db = SEED_DATA;
@@ -642,6 +649,12 @@ class MockDatabase {
   // Users / Auth
   login(email: string): User | null {
     const user = this.db.users[email.toLowerCase().trim()];
+    if (user) {
+      localStorage.setItem('bistroflow_user', JSON.stringify({
+        email: user.email,
+        restaurantId: user.restaurantId,
+      }));
+    }
     return user || null;
   }
 
@@ -676,7 +689,7 @@ class MockDatabase {
       whatsAppNumber: '',
       logoUrl: '',
       heroImageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&auto=format&fit=crop&q=80',
-      pricingPlan: 'starter',
+      pricingPlan: 'website',
       domain: `${restaurantName.en.toLowerCase().replace(/[^a-z0-9]/g, '') || restId}.bistroflow.com`,
       published: false,
       templateId: 'modern',
@@ -705,6 +718,10 @@ class MockDatabase {
     this.db.orders[restId] = [];
 
     this.save();
+    localStorage.setItem('bistroflow_user', JSON.stringify({
+      email: newUser.email,
+      restaurantId: newUser.restaurantId,
+    }));
     return { user: newUser, restaurant: newRestaurant };
   }
 
