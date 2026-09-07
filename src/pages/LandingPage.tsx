@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 
 interface LandingPageProps {
-  onStartSignUp: () => void;
+  onStartSignUp: (planId?: 'menu-link' | 'whatsapp' | 'website') => void;
   onStartLogin: () => void;
   onViewDemoRestaurant: (id: string) => void;
 }
@@ -34,20 +34,20 @@ const plans = [
   {
     id: 'whatsapp',
     name: 'WhatsApp Orders',
-    price: '$110',
+    price: '$25',
     billing: 'one-time',
-    desc: 'A branded website where customers browse your menu and order directly via WhatsApp.',
+    desc: 'A branded website where customers browse your menu and order directly via WhatsApp or call your hotline.',
     icon: <MessageCircle className="w-5 h-5" />,
     color: 'from-emerald-500 to-teal-600',
     features: [
       'Professional restaurant website',
-      'Full digital menu',
-      'Order via WhatsApp button',
-      'Logo & brand colors',
-      'QR code',
+      'Upload images or PDF menu',
+      'Direct WhatsApp order button',
+      'Hotline call button',
+      'QR code for tables',
     ],
     cta: 'Get Started',
-    popular: false,
+    popular: true,
     accent: '#10b981',
   },
   {
@@ -100,7 +100,7 @@ const steps = [
 ];
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onStartSignUp, onStartLogin, onViewDemoRestaurant }) => {
-  const { t, language, setLanguage } = useLanguage();
+  const { language, setLanguage } = useLanguage();
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
 
   const faqs = [
@@ -147,7 +147,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartSignUp, onStart
               className="text-sm font-medium text-zinc-600 hover:text-zinc-900 px-3 py-2 transition-all">
               Log in
             </button>
-            <button onClick={onStartSignUp}
+            <button onClick={() => onStartSignUp()}
               className="text-sm font-semibold bg-zinc-900 text-white px-4 py-2 rounded-xl hover:bg-zinc-700 transition-all shadow-sm">
               Get Started
             </button>
@@ -185,7 +185,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartSignUp, onStart
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-            <button onClick={onStartSignUp}
+            <button onClick={() => onStartSignUp()}
               className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold text-base px-7 py-3.5 rounded-xl transition-all shadow-lg shadow-orange-500/25 hover:-translate-y-0.5">
               Start Building Free
               <ArrowRight className="w-4 h-4" />
@@ -352,7 +352,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartSignUp, onStart
                 </div>
                 <div className="px-6 pb-6">
                   <button
-                    onClick={onStartSignUp}
+                    onClick={() => onStartSignUp(plan.id === 'website' ? 'website' : plan.id === 'whatsapp' ? 'whatsapp' : 'menu-link')}
                     className={`w-full py-3 rounded-xl text-sm font-semibold transition-all duration-150 ${plan.popular ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-md shadow-orange-200' : 'bg-zinc-900 text-white hover:bg-zinc-700'}`}>
                     {plan.cta}
                   </button>
@@ -403,7 +403,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartSignUp, onStart
         <div className="saas-container relative text-center">
           <h2 className="text-3xl sm:text-5xl font-extrabold text-white mb-4 tracking-tight">Ready to Go Live?</h2>
           <p className="text-zinc-400 text-base mb-8 max-w-xl mx-auto">Join hundreds of restaurants growing their sales with BistroFlow. Setup takes less than 30 minutes.</p>
-          <button onClick={onStartSignUp}
+          <button onClick={() => onStartSignUp()}
             className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold text-base px-8 py-4 rounded-xl transition-all shadow-lg shadow-orange-500/30 hover:-translate-y-0.5">
             Start Building Now
             <ArrowRight className="w-4 h-4" />

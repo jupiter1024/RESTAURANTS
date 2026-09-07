@@ -1,152 +1,104 @@
-import { useState, useEffect } from 'react';
-import { LanguageProvider } from './utils/translate';
+import { useState } from 'react';
 import { LandingPage } from './pages/LandingPage';
-import { AuthPage } from './pages/AuthPage';
-import { Onboarding } from './pages/Onboarding';
-import { Dashboard } from './pages/Dashboard';
-import { TemplateWrapper } from './templates/TemplateWrapper';
-import { db } from './db/mockDb';
+import { SimpleAuth } from './pages/SimpleAuth';
+import { MenuUploadScreen } from './pages/MenuUploadScreen';
+import { AdminDashboard } from './pages/AdminDashboard';
+import { simpleDb } from './db/simpleDb';
+
+type Page = 'landing' | 'auth' | 'upload' | 'admin';
+type AuthMode = 'login' | 'signup';
+type PlanType = 'menu-link' | 'whatsapp' | 'website';
 
 function App() {
-  const [route, setRoute] = useState<{
-    page: 'landing' | 'login' | 'signup' | 'onboarding' | 'dashboard' | 'restaurant';
-    restaurantId?: string;
-  }>(() => {
-    // Check URL path on bootstrap
-    const path = window.location.pathname;
-    const match = path.match(/\/r\/([a-zA-Z0-9_-]+)/);
-    if (match) {
-      return { page: 'restaurant', restaurantId: match[1] };
-    }
-
-    // Check existing active user session
-    const activeUserStr = localStorage.getItem('bistroflow_user');
-    if (activeUserStr) {
-      try {
-        const userObj = JSON.parse(activeUserStr);
-        const restObj = db.getRestaurant(userObj.restaurantId);
-        if (restObj) {
-          // If restaurant is published and has menu, send to dashboard. Otherwise onboarding.
-          const menuObj = db.getMenu(userObj.restaurantId);
-          const hasMenu = menuObj && menuObj.categories.length > 0;
-          return {
-            page: (restObj.published && hasMenu) ? 'dashboard' : 'onboarding',
-            restaurantId: userObj.restaurantId
-          };
-        }
-      } catch (err) {
-        localStorage.removeItem('bistroflow_user');
+  // Detect session on boot
+  const getInitialPage = (): { page: Page; restaurantId?: string } => {
+    const session = simpleDb.getSession();
+    if (session) {
+      const restaurant = simpleDb.getRestaurant(session.restaurantId);
+      if (restaurant) {
+        return { page: 'admin', restaurantId: session.restaurantId };
       }
     }
-
     return { page: 'landing' };
-  });
-
-  // Listen to popstate for back/forward navigation
-  useEffect(() => {
-    const handlePopState = () => {
-      const path = window.location.pathname;
-      const match = path.match(/\/r\/([a-zA-Z0-9_-]+)/);
-      if (match) {
-        setRoute({ page: 'restaurant', restaurantId: match[1] });
-      } else {
-        const activeUserStr = localStorage.getItem('bistroflow_user');
-        if (activeUserStr) {
-          try {
-            const userObj = JSON.parse(activeUserStr);
-            const restObj = db.getRestaurant(userObj.restaurantId);
-            if (restObj) {
-              const menuObj = db.getMenu(userObj.restaurantId);
-              const hasMenu = menuObj && menuObj.categories.length > 0;
-              setRoute({
-                page: (restObj.published && hasMenu) ? 'dashboard' : 'onboarding',
-                restaurantId: userObj.restaurantId
-              });
-              return;
-            }
-          } catch (e) {}
-        }
-        setRoute({ page: 'landing' });
-      }
-    };
-
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
-  const navigateTo = (page: typeof route.page, restaurantId?: string) => {
-    if (page === 'restaurant' && restaurantId) {
-      window.history.pushState(null, '', `/r/${restaurantId}`);
-    } else {
-      window.history.pushState(null, '', '/');
-    }
-    setRoute({ page, restaurantId });
   };
 
-  const handleAuthSuccess = (_userId: string, restaurantId: string) => {
-    // Check if onboarding completed
-    const rest = db.getRestaurant(restaurantId);
-    const menuObj = db.getMenu(restaurantId);
-    const hasMenu = menuObj && menuObj.categories.length > 0;
+  const initial = getInitialPage();
+  const [page, setPage] = useState<Page>(initial.page);
+  const [restaurantId, setRestaurantId] = useState<string | undefined>(initial.restaurantId);
+  const [authMode, setAuthMode] = useState<AuthMode>('signup');
+  const [selectedPlan, setSelectedPlan] = useState<PlanType>('menu-link');
 
-    if (rest && rest.published && hasMenu) {
-      navigateTo('dashboard', restaurantId);
+  const handleAuthSuccess = (restId: string, isSignUp: boolean) => {
+    setRestaurantId(restId);
+    const r = simpleDb.getRestaurant(restId);
+    // If sign in (login) or if menu files already exist, go straight to Admin!
+    if (!isSignUp || (r && r.menuFiles.length > 0)) {
+      setPage('admin');
     } else {
-      navigateTo('onboarding', restaurantId);
+      setPage('upload');
     }
+  };
+
+  const handleUploadNext = async () => {
+    setPage('admin');
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('bistroflow_user');
-    navigateTo('landing');
+    simpleDb.logout();
+    setRestaurantId(undefined);
+    setPage('landing');
   };
 
-  if (route.page === 'restaurant' && route.restaurantId) {
+  // Auth (signup or login)
+  if (page === 'auth') {
     return (
-      <LanguageProvider>
-        <TemplateWrapper
-          restaurantId={route.restaurantId}
-          isPreview={false}
-          onClosePreview={() => navigateTo('landing')}
-        />
-      </LanguageProvider>
+      <SimpleAuth
+        mode={authMode}
+        plan={selectedPlan}
+        onSuccess={handleAuthSuccess}
+        onToggleMode={() => setAuthMode(m => m === 'signup' ? 'login' : 'signup')}
+      />
     );
   }
 
+  // Upload screen (after brand-new signup)
+  if (page === 'upload' && restaurantId) {
+    return (
+      <MenuUploadScreen
+        restaurantId={restaurantId}
+        onNext={handleUploadNext}
+        onManualEntry={handleUploadNext}
+      />
+    );
+  }
+
+  // Admin dashboard
+  if (page === 'admin' && restaurantId) {
+    return (
+      <AdminDashboard
+        restaurantId={restaurantId}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  // Default / Landing page
   return (
-    <LanguageProvider>
-      <div className="min-h-screen text-gray-100 bg-gray-950 font-sans selection:bg-blue-600 selection:text-white antialiased">
-        {/* Render pages */}
-        {route.page === 'landing' && (
-          <LandingPage
-            onStartSignUp={() => navigateTo('signup')}
-            onStartLogin={() => navigateTo('login')}
-            onViewDemoRestaurant={(id) => navigateTo('restaurant', id)}
-          />
-        )}
-
-        {(route.page === 'login' || route.page === 'signup') && (
-          <AuthPage
-            initialMode={route.page}
-            onAuthSuccess={handleAuthSuccess}
-          />
-        )}
-
-        {route.page === 'onboarding' && route.restaurantId && (
-          <Onboarding
-            restaurantId={route.restaurantId}
-            onOnboardingComplete={() => navigateTo('dashboard', route.restaurantId)}
-          />
-        )}
-
-        {route.page === 'dashboard' && route.restaurantId && (
-          <Dashboard
-            restaurantId={route.restaurantId}
-            onLogout={handleLogout}
-          />
-        )}
-      </div>
-    </LanguageProvider>
+    <LandingPage
+      onStartSignUp={(planId) => {
+        setSelectedPlan(planId || 'menu-link');
+        setAuthMode('signup');
+        setPage('auth');
+      }}
+      onStartLogin={() => {
+        setAuthMode('login');
+        setPage('auth');
+      }}
+      onViewDemoRestaurant={() => {
+        setAuthMode('signup');
+        setPage('auth');
+      }}
+    />
   );
 }
 
