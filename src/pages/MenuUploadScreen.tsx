@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { simpleDb } from '../db/simpleDb';
+import { apiAddMenuFile } from '../api/client';
 
 
 interface MenuUploadScreenProps {
@@ -19,6 +19,7 @@ export const MenuUploadScreen: React.FC<MenuUploadScreenProps> = ({ restaurantId
   const [imageDragging, setImageDragging] = useState(false);
   const [pdfDragging, setPdfDragging] = useState(false);
   const [error, setError] = useState('');
+  const [uploading, setUploading] = useState(false);
 
   const imageInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -73,24 +74,21 @@ export const MenuUploadScreen: React.FC<MenuUploadScreenProps> = ({ restaurantId
 
   const handleContinue = async () => {
     if (!canContinue) return;
-    // Save all files to the DB
-    for (const uf of uploadedFiles) {
-      await new Promise<void>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          simpleDb.addMenuFile(restaurantId, {
-            type: uf.type,
-            name: uf.file.name,
-            dataUrl: reader.result as string,
-          });
-          resolve();
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(uf.file);
-      });
+    setUploading(true);
+    setError('');
+    try {
+      // Upload each file directly to R2 via the API
+      for (const uf of uploadedFiles) {
+        await apiAddMenuFile(restaurantId, uf.file, uf.type);
+      }
+      onNext();
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Upload failed. Please try again.');
+    } finally {
+      setUploading(false);
     }
-    onNext();
   };
+
 
   return (
     <div className="mup-root">
@@ -329,21 +327,37 @@ export const MenuUploadScreen: React.FC<MenuUploadScreenProps> = ({ restaurantId
 
         {/* CTA area */}
         <div className="mup-cta">
+          {error && (
+            <p className="text-red-400 text-sm text-center mb-3">{error}</p>
+          )}
           <button
-            className={`mup-cta-btn ${canContinue ? 'mup-cta-btn-active' : 'mup-cta-btn-disabled'}`}
+            className={`mup-cta-btn ${canContinue && !uploading ? 'mup-cta-btn-active' : 'mup-cta-btn-disabled'}`}
             onClick={handleContinue}
-            disabled={!canContinue}
+            disabled={!canContinue || uploading}
           >
-            <span>Continue to Preview</span>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            {uploading ? (
+              <>
+                <span>Uploading…</span>
+                <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.3" />
+                  <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                </svg>
+              </>
+            ) : (
+              <>
+                <span>Continue to Preview</span>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </>
+            )}
           </button>
 
           <button className="mup-skip-btn" onClick={onManualEntry}>
             I'll add menu items manually instead
           </button>
         </div>
+
 
         {/* Trust badges */}
         <div className="mup-trust">

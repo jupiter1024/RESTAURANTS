@@ -4,25 +4,36 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev:vite": "vite",
+    "dev:worker": "wrangler dev src/server/index.ts --port 8787 --local",
+    "dev": "concurrently \"npm run dev:worker\" \"npm run dev:vite\" --names \"worker,vite\" --prefix-colors \"cyan,green\"",
     "build": "tsc -b && vite build",
+    "build:worker": "wrangler deploy --dry-run",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "db:migrate": "wrangler d1 execute bistroflow-db --local --file=src/server/db/schema.sql",
+    "db:migrate:remote": "wrangler d1 execute bistroflow-db --file=src/server/db/schema.sql",
+    "db:studio": "wrangler d1 execute bistroflow-db --local --command=\"SELECT name FROM sqlite_master WHERE type='table'\"",
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
+    "hono": "^4.13.7",
     "lucide-react": "^1.33.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260907.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
+    "concurrently": "^10.0.5",
     "oxlint": "^1.75.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
-    "vite": "^8.2.0"
+    "vite": "^8.2.0",
+    "wrangler": "^4.129.1"
   }
 }

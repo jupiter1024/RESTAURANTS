@@ -25,20 +25,20 @@ export const SimpleAuth: React.FC<SimpleAuthProps> = ({ mode, plan = 'menu-link'
 
     setLoading(true);
     try {
-      await new Promise(r => setTimeout(r, 600)); // simulate async
       if (mode === 'signup') {
-        const user = simpleDb.register(email, password, restaurantName.trim(), plan);
+        const user = await simpleDb.register(email, password, restaurantName.trim(), plan);
         onSuccess(user.restaurantId, true);
       } else {
-        const user = simpleDb.login(email, password);
+        const user = await simpleDb.login(email, password);
         onSuccess(user.restaurantId, false);
       }
-    } catch (err: any) {
-      setError(err.message || 'Something went wrong.');
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Something went wrong.');
     } finally {
       setLoading(false);
     }
   };
+
 
   return (
     <div className="sauth-root">

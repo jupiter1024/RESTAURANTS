@@ -88,12 +88,12 @@ export const InteractiveCustomerView: React.FC<InteractiveCustomerViewProps> = (
 
   const cartSubtotal = cart.reduce((acc, item) => acc + item.totalPrice, 0);
 
-  const handlePlaceOrder = (e: React.FormEvent) => {
+  const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName || !customerPhone) return;
 
     try {
-      const order = simpleDb.createOrder(restaurant.id, {
+      const order = await simpleDb.createOrder(restaurant.id, {
         customerName,
         customerPhone,
         address: deliveryAddress,
@@ -128,10 +128,11 @@ export const InteractiveCustomerView: React.FC<InteractiveCustomerViewProps> = (
       setIsCartOpen(false);
 
       setTimeout(() => setOrderSuccessMsg(''), 5000);
-    } catch (err: any) {
-      alert(err.message || 'Failed to place order.');
+    } catch (err: unknown) {
+      alert((err as Error).message || 'Failed to place order.');
     }
   };
+
 
   return (
     <div

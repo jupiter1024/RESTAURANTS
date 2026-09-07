@@ -1,20 +1,11 @@
 import React, { useState, useRef } from 'react';
 import type { SimpleRestaurant, InteractiveItem, MenuItemOption, MenuItemAddon } from '../db/simpleDb';
 import { simpleDb } from '../db/simpleDb';
+import { apiUploadImage } from '../api/client';
 
 interface InteractiveMenuManagerProps {
   restaurant: SimpleRestaurant;
   onRefresh: () => void;
-}
-
-// Helper: read file as base64 dataURL
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
 }
 
 export const InteractiveMenuManager: React.FC<InteractiveMenuManagerProps> = ({ restaurant, onRefresh }) => {
@@ -62,17 +53,17 @@ export const InteractiveMenuManager: React.FC<InteractiveMenuManagerProps> = ({ 
   const orders = restaurant.orders || [];
 
   // Category Actions
-  const handleAddCategory = (e: React.FormEvent) => {
+  const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCatName.trim()) return;
-    simpleDb.addCategory(restaurant.id, newCatName.trim());
+    await simpleDb.addCategory(restaurant.id, newCatName.trim());
     setNewCatName('');
     onRefresh();
   };
 
-  const handleDeleteCategory = (catId: string) => {
+  const handleDeleteCategory = async (catId: string) => {
     if (window.confirm('Delete this category and all items inside it?')) {
-      simpleDb.deleteCategory(restaurant.id, catId);
+      await simpleDb.deleteCategory(restaurant.id, catId);
       onRefresh();
     }
   };
@@ -108,10 +99,10 @@ export const InteractiveMenuManager: React.FC<InteractiveMenuManagerProps> = ({ 
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const dataUrl = await readFileAsDataUrl(file);
-      setItemImg(dataUrl);
-    } catch (err) {
-      alert('Failed to upload image');
+      const url = await apiUploadImage(restaurant.id, file);
+      setItemImg(url);
+    } catch {
+      alert('Failed to upload image. Please try again.');
     }
   };
 
@@ -119,10 +110,10 @@ export const InteractiveMenuManager: React.FC<InteractiveMenuManagerProps> = ({ 
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const dataUrl = await readFileAsDataUrl(file);
-      setLogoUrl(dataUrl);
-    } catch (err) {
-      alert('Failed to upload logo');
+      const url = await apiUploadImage(restaurant.id, file);
+      setLogoUrl(url);
+    } catch {
+      alert('Failed to upload logo. Please try again.');
     }
   };
 
@@ -160,11 +151,11 @@ export const InteractiveMenuManager: React.FC<InteractiveMenuManagerProps> = ({ 
     setItemAddons(prev => prev.filter(a => a.id !== id));
   };
 
-  const handleSaveItem = (e: React.FormEvent) => {
+  const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!itemName.trim() || !itemCatId) return;
 
-    simpleDb.saveItem(restaurant.id, {
+    await simpleDb.saveItem(restaurant.id, {
       id: editingItem?.id,
       categoryId: itemCatId,
       name: itemName.trim(),
@@ -181,17 +172,17 @@ export const InteractiveMenuManager: React.FC<InteractiveMenuManagerProps> = ({ 
     onRefresh();
   };
 
-  const handleDeleteItem = (itemId: string) => {
+  const handleDeleteItem = async (itemId: string) => {
     if (window.confirm('Are you sure you want to delete this menu item?')) {
-      simpleDb.deleteItem(restaurant.id, itemId);
+      await simpleDb.deleteItem(restaurant.id, itemId);
       onRefresh();
     }
   };
 
   // Branding Saver
-  const handleSaveBranding = (e: React.FormEvent) => {
+  const handleSaveBranding = async (e: React.FormEvent) => {
     e.preventDefault();
-    simpleDb.updateBranding(restaurant.id, {
+    await simpleDb.updateBranding(restaurant.id, {
       template,
       primaryColor,
       bgColor,
@@ -202,10 +193,11 @@ export const InteractiveMenuManager: React.FC<InteractiveMenuManagerProps> = ({ 
     alert('✓ Branding & Template updated!');
   };
 
-  const updateOrderStatus = (orderId: string, status: any) => {
-    simpleDb.updateOrderStatus(restaurant.id, orderId, status);
+  const updateOrderStatus = async (orderId: string, status: 'pending' | 'preparing' | 'completed' | 'cancelled') => {
+    await simpleDb.updateOrderStatus(restaurant.id, orderId, status);
     onRefresh();
   };
+
 
   return (
     <div className="imm-root animate-fade-in">
