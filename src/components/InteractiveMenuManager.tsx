@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import type { SimpleRestaurant, InteractiveItem, MenuItemOption, MenuItemAddon } from '../db/simpleDb';
 import { simpleDb } from '../db/simpleDb';
 import { apiUploadImage } from '../api/client';
+import { BranchManager } from './BranchManager';
 
 interface InteractiveMenuManagerProps {
   restaurant: SimpleRestaurant;
@@ -9,7 +10,9 @@ interface InteractiveMenuManagerProps {
 }
 
 export const InteractiveMenuManager: React.FC<InteractiveMenuManagerProps> = ({ restaurant, onRefresh }) => {
-  const [activeTab, setActiveTab] = useState<'menu' | 'branding' | 'orders'>('menu');
+  const [activeTab, setActiveTab] = useState<'menu' | 'branding' | 'branches' | 'orders'>('menu');
+  const [orderBranchFilter, setOrderBranchFilter] = useState<string>('all');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<string>('all');
 
   // Category State
   const [newCatName, setNewCatName] = useState('');
@@ -213,7 +216,13 @@ export const InteractiveMenuManager: React.FC<InteractiveMenuManagerProps> = ({ 
           className={`imm-tab ${activeTab === 'branding' ? 'active' : ''}`}
           onClick={() => setActiveTab('branding')}
         >
-          🎨 Website Templates & Custom Colors
+          🎨 Website Templates & Colors
+        </button>
+        <button
+          className={`imm-tab ${activeTab === 'branches' ? 'active' : ''}`}
+          onClick={() => setActiveTab('branches')}
+        >
+          🏢 Branches & Delivery ({restaurant.branches?.length || 0})
         </button>
         <button
           className={`imm-tab ${activeTab === 'orders' ? 'active' : ''}`}
@@ -733,54 +742,262 @@ export const InteractiveMenuManager: React.FC<InteractiveMenuManagerProps> = ({ 
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-         TAB 3: LIVE ORDERS MANAGER
+         TAB 3: BRANCHES & DELIVERY MANAGER
+         ───────────────────────────────────────────────────────────── */}
+      {activeTab === 'branches' && (
+        <BranchManager
+          restaurantId={restaurant.id}
+          branches={restaurant.branches || []}
+          onBranchesUpdated={onRefresh}
+        />
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+         TAB 4: LIVE ORDERS MANAGER
          ───────────────────────────────────────────────────────────── */}
       {activeTab === 'orders' && (
-        <div className="imm-card">
-          <h3 className="imm-card-title">Incoming Customer Orders</h3>
-
-          {orders.length === 0 ? (
-            <p className="imm-empty">No orders received yet.</p>
-          ) : (
-            <div className="imm-orders-list">
-              {orders.map(order => (
-                <div key={order.id} className="imm-order-card">
-                  <div className="imm-order-header">
-                    <div>
-                      <span className="imm-order-id">#{order.id}</span>
-                      <span className="imm-order-name">{order.customerName} ({order.customerPhone})</span>
-                      <span className="imm-order-type">{order.orderType.toUpperCase()}</span>
-                    </div>
-                    <span className="imm-order-total">${order.total.toFixed(2)}</span>
-                  </div>
-
-                  {order.address && (
-                    <div className="imm-order-address">📍 {order.address}</div>
-                  )}
-
-                  <div className="imm-order-items">
-                    {order.items.map((item, i) => (
-                      <div key={i} className="imm-order-item-line">
-                        <span>{item.quantity}x {item.name} {item.selectedOption ? `(${item.selectedOption})` : ''}</span>
-                        <span>${item.totalPrice.toFixed(2)}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="imm-order-status-row">
-                    <span>Status: <strong className={`imm-status-${order.status}`}>{order.status.toUpperCase()}</strong></span>
-                    <div className="imm-status-btns">
-                      <button onClick={() => updateOrderStatus(order.id, 'preparing')}>Preparing</button>
-                      <button onClick={() => updateOrderStatus(order.id, 'completed')}>Completed</button>
-                      <button onClick={() => updateOrderStatus(order.id, 'cancelled')}>Cancel</button>
-                    </div>
-                  </div>
-                </div>
-              ))}
+        <div className="imm-card space-y-5">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-4">
+            <div>
+              <h3 className="imm-card-title !mb-1">Customer Orders Dashboard</h3>
+              <p className="text-xs text-slate-400">
+                Track, filter, and manage incoming delivery & pickup orders across all restaurant branches.
+              </p>
             </div>
-          )}
+
+            {/* Filter controls */}
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Branch Filter */}
+              {(restaurant.branches || []).length > 0 && (
+                <div className="flex items-center gap-1.5 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
+                  <span className="text-xs text-slate-400">🏢 Branch:</span>
+                  <select
+                    value={orderBranchFilter}
+                    onChange={(e) => setOrderBranchFilter(e.target.value)}
+                    className="bg-transparent text-xs text-white focus:outline-none cursor-pointer"
+                  >
+                    <option value="all">All Branches</option>
+                    {(restaurant.branches || []).map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Status Filter */}
+              <div className="flex items-center gap-1.5 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
+                <span className="text-xs text-slate-400">🚦 Status:</span>
+                <select
+                  value={orderStatusFilter}
+                  onChange={(e) => setOrderStatusFilter(e.target.value)}
+                  className="bg-transparent text-xs text-white focus:outline-none cursor-pointer"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="preparing">Preparing</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Filtered Orders List */}
+          {(() => {
+            const filteredOrders = orders.filter((o) => {
+              if (orderBranchFilter !== 'all' && o.branchId !== orderBranchFilter) return false;
+              if (orderStatusFilter !== 'all' && o.status !== orderStatusFilter) return false;
+              return true;
+            });
+
+            if (filteredOrders.length === 0) {
+              return (
+                <div className="text-center py-12 text-slate-500">
+                  <div className="text-4xl mb-2">📭</div>
+                  <p className="text-sm font-medium">No orders match the selected filters.</p>
+                </div>
+              );
+            }
+
+            return (
+              <div className="imm-orders-list space-y-4">
+                {filteredOrders.map((order) => {
+                  const mapsLink =
+                    order.googleMapsUrl ||
+                    (order.customerLat && order.customerLng
+                      ? `https://www.google.com/maps?q=${order.customerLat},${order.customerLng}`
+                      : null);
+
+                  return (
+                    <div
+                      key={order.id}
+                      className="bg-slate-950/80 border border-slate-800/90 rounded-2xl p-5 hover:border-slate-700 transition-all space-y-3.5 shadow-lg"
+                    >
+                      {/* Top Bar */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/60 pb-3">
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-orange-400">
+                            #{order.id}
+                          </span>
+                          <span className="font-bold text-white text-base">
+                            {order.customerName}
+                          </span>
+                          <a
+                            href={`tel:${order.customerPhone}`}
+                            className="text-xs text-slate-400 hover:text-white bg-slate-900 px-2 py-0.5 rounded border border-slate-800"
+                          >
+                            📞 {order.customerPhone}
+                          </a>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-xs uppercase font-bold px-2.5 py-1 rounded-full ${
+                              order.orderType === 'delivery'
+                                ? 'bg-orange-500/10 text-orange-400 border border-orange-500/30'
+                                : 'bg-blue-500/10 text-blue-400 border border-blue-500/30'
+                            }`}
+                          >
+                            {order.orderType === 'delivery' ? '🛵 Delivery' : '🥡 Pickup'}
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Branch & Location Details */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-900/60 p-3 rounded-xl border border-slate-800/60">
+                        <div>
+                          <span className="text-slate-400">🏢 Assigned Branch: </span>
+                          <span className="font-semibold text-slate-200">
+                            {order.branchName || 'Main Branch'}
+                          </span>
+                          {order.distanceKm != null && (
+                            <span className="ml-2 text-amber-400">
+                              (📏 {order.distanceKm} km away)
+                            </span>
+                          )}
+                          {order.deliveryZoneName && (
+                            <span className="ml-2 text-emerald-400">
+                              (🗺️ {order.deliveryZoneName})
+                            </span>
+                          )}
+                        </div>
+
+                        {order.address && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-300 truncate">
+                              📍 {order.address}
+                            </span>
+                            {mapsLink && (
+                              <a
+                                href={mapsLink}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="ml-2 inline-flex items-center gap-1 text-[11px] font-semibold text-orange-400 hover:text-orange-300 underline shrink-0"
+                              >
+                                🗺️ View Map
+                              </a>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Items Table */}
+                      <div className="bg-slate-900/40 rounded-xl p-3 border border-slate-800/40 text-xs space-y-1.5">
+                        {order.items.map((item, i) => (
+                          <div key={i} className="flex justify-between items-center text-slate-300">
+                            <span>
+                              <strong className="text-white">{item.quantity}x</strong> {item.name}{' '}
+                              {item.selectedOption ? <span className="text-slate-400">({item.selectedOption})</span> : ''}
+                              {item.selectedAddons && item.selectedAddons.length > 0 && (
+                                <span className="text-slate-400"> + [{item.selectedAddons.join(', ')}]</span>
+                              )}
+                            </span>
+                            <span className="font-mono text-slate-200">
+                              ${item.totalPrice?.toFixed(2) || '0.00'}
+                            </span>
+                          </div>
+                        ))}
+
+                        <div className="pt-2 mt-2 border-t border-slate-800/80 flex flex-col gap-1 text-xs">
+                          {order.orderType === 'delivery' && (
+                            <div className="flex justify-between text-slate-400">
+                              <span>Delivery Fee:</span>
+                              <span className="font-mono text-slate-300">${(order.deliveryFee || 0).toFixed(2)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between font-bold text-sm text-white pt-1">
+                            <span>Grand Total:</span>
+                            <span className="text-orange-400 font-mono">${order.total.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Status & Action Buttons */}
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-400">Status:</span>
+                          <span
+                            className={`text-xs font-bold uppercase px-2.5 py-0.5 rounded-full ${
+                              order.status === 'completed'
+                                ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                : order.status === 'cancelled'
+                                ? 'bg-red-950 text-red-400 border border-red-800'
+                                : order.status === 'preparing'
+                                ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                                : 'bg-slate-800 text-slate-300 border border-slate-700'
+                            }`}
+                          >
+                            {order.status}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            onClick={() => updateOrderStatus(order.id, 'preparing')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${
+                              order.status === 'preparing'
+                                ? 'bg-amber-500 text-black'
+                                : 'bg-slate-900 hover:bg-slate-800 text-amber-300 border border-amber-500/30'
+                            }`}
+                          >
+                            👨‍🍳 Preparing
+                          </button>
+                          <button
+                            onClick={() => updateOrderStatus(order.id, 'completed')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${
+                              order.status === 'completed'
+                                ? 'bg-emerald-500 text-black'
+                                : 'bg-slate-900 hover:bg-slate-800 text-emerald-300 border border-emerald-500/30'
+                            }`}
+                          >
+                            ✅ Completed
+                          </button>
+                          <button
+                            onClick={() => updateOrderStatus(order.id, 'cancelled')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${
+                              order.status === 'cancelled'
+                                ? 'bg-red-500 text-white'
+                                : 'bg-slate-900 hover:bg-slate-800 text-red-400 border border-red-500/30'
+                            }`}
+                          >
+                            ❌ Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
   );
 };
+

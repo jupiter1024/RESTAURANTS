@@ -50,7 +50,7 @@ admin.use('*', async (c, next) => {
   await next();
 });
 
-// GET RESTAURANT DETAILS
+// GET RESTAURANT DETAILS (Full multi-branch & delivery data)
 admin.get('/restaurant', async (c) => {
   const restId = c.get('restaurantId');
   const rest = await c.env.DB.prepare('SELECT * FROM restaurants WHERE id = ?').bind(restId).first<{
@@ -100,14 +100,92 @@ admin.get('/restaurant', async (c) => {
     uploaded_at: string;
   }>()).results;
 
+  // Branches with their zones and tiers
+  const rawBranches = (await c.env.DB.prepare('SELECT * FROM branches WHERE restaurant_id = ? ORDER BY created_at ASC').bind(restId).all<{
+    id: string;
+    restaurant_id: string;
+    name: string;
+    address?: string;
+    phone?: string;
+    latitude: number;
+    longitude: number;
+    delivery_mode: string;
+    max_delivery_radius_km: number;
+    base_delivery_fee: number;
+    base_delivery_distance_km: number;
+    extra_fee_per_km: number;
+    is_active: number;
+    created_at: string;
+  }>()).results;
+
+  const enrichedBranches = await Promise.all(
+    rawBranches.map(async (b) => {
+      const zones = (await c.env.DB.prepare('SELECT * FROM delivery_zones WHERE branch_id = ? ORDER BY zone_name ASC').bind(b.id).all<{
+        id: string;
+        branch_id: string;
+        zone_name: string;
+        fee: number;
+        estimated_time_min?: number;
+      }>()).results;
+
+      const tiers = (await c.env.DB.prepare('SELECT * FROM delivery_distance_tiers WHERE branch_id = ? ORDER BY min_km ASC').bind(b.id).all<{
+        id: string;
+        branch_id: string;
+        min_km: number;
+        max_km: number;
+        fee: number;
+      }>()).results;
+
+      return {
+        id: b.id,
+        restaurantId: b.restaurant_id,
+        name: b.name,
+        address: b.address || '',
+        phone: b.phone || '',
+        latitude: Number(b.latitude) || 30.0444,
+        longitude: Number(b.longitude) || 31.2357,
+        deliveryMode: (b.delivery_mode as 'radius' | 'zone') || 'radius',
+        maxDeliveryRadiusKm: Number(b.max_delivery_radius_km) || 20,
+        baseDeliveryFee: Number(b.base_delivery_fee) || 20,
+        baseDeliveryDistanceKm: Number(b.base_delivery_distance_km) || 5,
+        extraFeePerKm: Number(b.extra_fee_per_km) || 3,
+        isActive: Boolean(b.is_active),
+        zones: zones.map((z) => ({
+          id: z.id,
+          branchId: z.branch_id,
+          zoneName: z.zone_name,
+          fee: z.fee,
+          estimatedTimeMin: z.estimated_time_min,
+        })),
+        tiers: tiers.map((t) => ({
+          id: t.id,
+          branchId: t.branch_id,
+          minKm: t.min_km,
+          maxKm: t.max_km,
+          fee: t.fee,
+        })),
+        createdAt: b.created_at,
+      };
+    })
+  );
+
   const orders = (await c.env.DB.prepare('SELECT * FROM orders WHERE restaurant_id = ? ORDER BY created_at DESC').bind(restId).all<{
     id: string;
+    restaurant_id: string;
+    branch_id?: string;
+    branch_name?: string;
     customer_name: string;
     customer_phone: string;
     address?: string;
     order_type: string;
     items_json: string;
+    delivery_fee: number;
     total: number;
+    delivery_zone_name?: string;
+    customer_lat?: number;
+    customer_lng?: number;
+    google_maps_url?: string;
+    distance_km?: number;
     status: string;
     created_at: string;
   }>()).results;
@@ -164,6 +242,7 @@ admin.get('/restaurant', async (c) => {
       } : {},
       categories: categories.map((cat) => ({ id: cat.id, name: cat.name })),
       items: enrichedItems,
+      branches: enrichedBranches,
       menuFiles: files.map((f) => ({
         id: f.id,
         type: f.file_type,
@@ -173,12 +252,21 @@ admin.get('/restaurant', async (c) => {
       })),
       orders: orders.map((o) => ({
         id: o.id,
+        restaurantId: o.restaurant_id,
+        branchId: o.branch_id,
+        branchName: o.branch_name,
         customerName: o.customer_name,
         customerPhone: o.customer_phone,
         address: o.address,
-        orderType: o.order_type,
+        orderType: o.order_type as 'delivery' | 'pickup',
         items: JSON.parse(o.items_json || '[]'),
-        total: o.total,
+        deliveryFee: Number(o.delivery_fee) || 0,
+        total: Number(o.total) || 0,
+        deliveryZoneName: o.delivery_zone_name,
+        customerLat: o.customer_lat,
+        customerLng: o.customer_lng,
+        googleMapsUrl: o.google_maps_url,
+        distanceKm: o.distance_km,
         status: o.status,
         createdAt: o.created_at,
       })),
@@ -206,6 +294,128 @@ admin.post('/contact', async (c) => {
   const { whatsappNumber, hotline } = await c.req.json<{ whatsappNumber?: string; hotline?: string }>();
   await c.env.DB.prepare('UPDATE restaurants SET whatsapp_number = ?, hotline = ? WHERE id = ?')
     .bind(whatsappNumber || '', hotline || '', restId).run();
+  return c.json({ success: true });
+});
+
+// ──────────────────────────────────────────────────────────────
+// BRANCHES MANAGEMENT
+// ──────────────────────────────────────────────────────────────
+admin.post('/branches', async (c) => {
+  const restId = c.get('restaurantId');
+  const body = await c.req.json<{
+    id?: string;
+    name: string;
+    address?: string;
+    phone?: string;
+    latitude: number;
+    longitude: number;
+    deliveryMode?: 'radius' | 'zone';
+    maxDeliveryRadiusKm?: number;
+    baseDeliveryFee?: number;
+    baseDeliveryDistanceKm?: number;
+    extraFeePerKm?: number;
+    isActive?: boolean;
+    zones?: Array<{ id?: string; zoneName: string; fee: number; estimatedTimeMin?: number }>;
+    tiers?: Array<{ id?: string; minKm: number; maxKm: number; fee: number }>;
+  }>();
+
+  if (!body.name || !body.name.trim()) {
+    return c.json({ error: 'Branch name is required' }, 400);
+  }
+
+  const branchId = body.id || generateId('br');
+  const now = new Date().toISOString();
+
+  const existing = await c.env.DB.prepare('SELECT id FROM branches WHERE id = ? AND restaurant_id = ?')
+    .bind(branchId, restId).first();
+
+  if (existing) {
+    await c.env.DB.prepare(`
+      UPDATE branches SET
+        name = ?,
+        address = ?,
+        phone = ?,
+        latitude = ?,
+        longitude = ?,
+        delivery_mode = ?,
+        max_delivery_radius_km = ?,
+        base_delivery_fee = ?,
+        base_delivery_distance_km = ?,
+        extra_fee_per_km = ?,
+        is_active = ?
+      WHERE id = ? AND restaurant_id = ?
+    `).bind(
+      body.name.trim(),
+      body.address?.trim() || '',
+      body.phone?.trim() || '',
+      Number(body.latitude) || 30.0444,
+      Number(body.longitude) || 31.2357,
+      body.deliveryMode || 'radius',
+      Number(body.maxDeliveryRadiusKm) || 20,
+      Number(body.baseDeliveryFee) || 20,
+      Number(body.baseDeliveryDistanceKm) || 5,
+      Number(body.extraFeePerKm) || 3,
+      body.isActive !== false ? 1 : 0,
+      branchId,
+      restId
+    ).run();
+  } else {
+    await c.env.DB.prepare(`
+      INSERT INTO branches (
+        id, restaurant_id, name, address, phone, latitude, longitude,
+        delivery_mode, max_delivery_radius_km, base_delivery_fee,
+        base_delivery_distance_km, extra_fee_per_km, is_active, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      branchId,
+      restId,
+      body.name.trim(),
+      body.address?.trim() || '',
+      body.phone?.trim() || '',
+      Number(body.latitude) || 30.0444,
+      Number(body.longitude) || 31.2357,
+      body.deliveryMode || 'radius',
+      Number(body.maxDeliveryRadiusKm) || 20,
+      Number(body.baseDeliveryFee) || 20,
+      Number(body.baseDeliveryDistanceKm) || 5,
+      Number(body.extraFeePerKm) || 3,
+      body.isActive !== false ? 1 : 0,
+      now
+    ).run();
+  }
+
+  // Update Zones if provided
+  if (Array.isArray(body.zones)) {
+    await c.env.DB.prepare('DELETE FROM delivery_zones WHERE branch_id = ?').bind(branchId).run();
+    for (const z of body.zones) {
+      if (z.zoneName && z.zoneName.trim()) {
+        const zoneId = z.id || generateId('zn');
+        await c.env.DB.prepare(
+          'INSERT INTO delivery_zones (id, branch_id, zone_name, fee, estimated_time_min) VALUES (?, ?, ?, ?, ?)'
+        ).bind(zoneId, branchId, z.zoneName.trim(), Number(z.fee) || 0, Number(z.estimatedTimeMin) || 45).run();
+      }
+    }
+  }
+
+  // Update Tiers if provided
+  if (Array.isArray(body.tiers)) {
+    await c.env.DB.prepare('DELETE FROM delivery_distance_tiers WHERE branch_id = ?').bind(branchId).run();
+    for (const t of body.tiers) {
+      const tierId = t.id || generateId('tr');
+      await c.env.DB.prepare(
+        'INSERT INTO delivery_distance_tiers (id, branch_id, min_km, max_km, fee) VALUES (?, ?, ?, ?, ?)'
+      ).bind(tierId, branchId, Number(t.minKm) || 0, Number(t.maxKm) || 0, Number(t.fee) || 0).run();
+    }
+  }
+
+  return c.json({ success: true, branchId });
+});
+
+admin.delete('/branches/:id', async (c) => {
+  const restId = c.get('restaurantId');
+  const branchId = c.req.param('id');
+  await c.env.DB.prepare('DELETE FROM branches WHERE id = ? AND restaurant_id = ?')
+    .bind(branchId, restId).run();
   return c.json({ success: true });
 });
 
@@ -346,14 +556,12 @@ admin.post('/upload', async (c) => {
     return c.json({ error: 'No file uploaded or invalid file payload' }, 400);
   }
 
-  // 1. Strict MIME type validation
   if (!ALLOWED_MIME_TYPES.has(file.type)) {
     return c.json({
       error: `Invalid file type "${file.type}". Only JPEG, PNG, WEBP, and PDF files are allowed.`,
     }, 400);
   }
 
-  // 2. Server-side size validation (25MB)
   if (file.size > MAX_FILE_SIZE) {
     return c.json({
       error: `File size exceeds 25MB limit (${(file.size / 1024 / 1024).toFixed(1)}MB).`,
@@ -363,11 +571,8 @@ admin.post('/upload', async (c) => {
   const fileType = file.type === 'application/pdf' ? 'pdf' : 'image';
   const fileId = generateId('f');
   const sanitizedFilename = file.name.replace(/[^a-zA-Z0-9.-]/g, '_').substring(0, 100);
-
-  // Scoped namespace strictly within the authenticated restaurant
   const r2Key = `uploads/${restId}/${fileId}-${sanitizedFilename}`;
 
-  // Store in R2 bucket
   await c.env.BUCKET.put(r2Key, await file.arrayBuffer(), {
     httpMetadata: { contentType: file.type },
   });

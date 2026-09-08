@@ -28,6 +28,9 @@ import {
   apiSaveItem,
   apiDeleteItem,
   apiUpdateBranding,
+  apiSaveBranch,
+  apiDeleteBranch,
+  apiCalculateDeliveryFee,
   apiCreateOrder,
   apiUpdateOrderStatus,
   apiGetOrders,
@@ -36,7 +39,22 @@ import {
 // ──────────────────────────────────────────────────────────────
 // Re-export all interfaces so imports from './simpleDb' still work
 // ──────────────────────────────────────────────────────────────
-export type { SimpleUser, MenuFile, MenuItemOption, MenuItemAddon, InteractiveItem, InteractiveCategory, RestaurantBranding, CustomerOrderItem, CustomerOrder, SimpleRestaurant, SimpleSchema } from './types';
+export type {
+  SimpleUser,
+  MenuFile,
+  MenuItemOption,
+  MenuItemAddon,
+  InteractiveItem,
+  InteractiveCategory,
+  RestaurantBranding,
+  Branch,
+  DeliveryZone,
+  DeliveryDistanceTier,
+  CustomerOrderItem,
+  CustomerOrder,
+  SimpleRestaurant,
+  SimpleSchema,
+} from './types';
 
 // ──────────────────────────────────────────────────────────────
 // Shim object
@@ -70,8 +88,14 @@ export const simpleDb = {
   // Branding
   updateBranding: apiUpdateBranding,
 
+  // Branches & Delivery
+  saveBranch: apiSaveBranch,
+  deleteBranch: apiDeleteBranch,
+  calculateDeliveryFee: apiCalculateDeliveryFee,
+
   // Orders
   createOrder: apiCreateOrder,
   updateOrderStatus: apiUpdateOrderStatus,
   getOrders: apiGetOrders,
 };
+

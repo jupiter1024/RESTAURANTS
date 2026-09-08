@@ -102,24 +102,101 @@ CREATE TABLE IF NOT EXISTS menu_files (
   FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE
 );
 
--- 10. Customer Orders
+-- 10. Multi-Branch Management
+CREATE TABLE IF NOT EXISTS branches (
+  id TEXT PRIMARY KEY,
+  restaurant_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  address TEXT,
+  phone TEXT,
+  latitude REAL DEFAULT 30.0444,
+  longitude REAL DEFAULT 31.2357,
+  delivery_mode TEXT NOT NULL DEFAULT 'radius', -- 'radius' (Option 1) | 'zone' (Option 2)
+  max_delivery_radius_km REAL NOT NULL DEFAULT 20,
+  base_delivery_fee REAL NOT NULL DEFAULT 20,
+  base_delivery_distance_km REAL NOT NULL DEFAULT 5,
+  extra_fee_per_km REAL NOT NULL DEFAULT 3,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE
+);
+
+-- 11. Delivery Zones (Option 2: Area/Neighborhood-based Delivery Fees)
+CREATE TABLE IF NOT EXISTS delivery_zones (
+  id TEXT PRIMARY KEY,
+  branch_id TEXT NOT NULL,
+  zone_name TEXT NOT NULL,
+  fee REAL NOT NULL DEFAULT 25,
+  estimated_time_min INTEGER DEFAULT 45,
+  FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE
+);
+
+-- 12. Delivery Distance Tiers (Option 1 Alternative: Brackets e.g. 0-5km=$20, 5-10km=$35)
+CREATE TABLE IF NOT EXISTS delivery_distance_tiers (
+  id TEXT PRIMARY KEY,
+  branch_id TEXT NOT NULL,
+  min_km REAL NOT NULL,
+  max_km REAL NOT NULL,
+  fee REAL NOT NULL,
+  FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE
+);
+
+-- 13. Customers Table (End-User Accounts per Restaurant)
+CREATE TABLE IF NOT EXISTS customers (
+  id TEXT PRIMARY KEY,
+  restaurant_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  email TEXT,
+  password_hash TEXT NOT NULL,
+  password_salt TEXT NOT NULL,
+  default_address TEXT,
+  default_lat REAL,
+  default_lng REAL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE,
+  UNIQUE(restaurant_id, phone),
+  UNIQUE(restaurant_id, email)
+);
+
+-- 14. Customer Orders
 CREATE TABLE IF NOT EXISTS orders (
   id TEXT PRIMARY KEY,
   restaurant_id TEXT NOT NULL,
+  customer_id TEXT,
+  branch_id TEXT,
+  branch_name TEXT,
   customer_name TEXT NOT NULL,
   customer_phone TEXT NOT NULL,
   address TEXT,
-  order_type TEXT NOT NULL,
+  order_type TEXT NOT NULL, -- 'delivery' | 'pickup'
   items_json TEXT NOT NULL,
+  delivery_fee REAL NOT NULL DEFAULT 0,
   total REAL NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
+  delivery_zone_name TEXT,
+  customer_lat REAL,
+  customer_lng REAL,
+  google_maps_url TEXT,
+  distance_km REAL,
+  status TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'preparing' | 'completed' | 'cancelled'
   created_at TEXT NOT NULL,
-  FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE
+  FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE,
+  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
+  FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL
 );
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_restaurants_slug ON restaurants(slug);
 CREATE INDEX IF NOT EXISTS idx_categories_rest ON categories(restaurant_id);
 CREATE INDEX IF NOT EXISTS idx_items_rest ON menu_items(restaurant_id);
+CREATE INDEX IF NOT EXISTS idx_customers_rest ON customers(restaurant_id);
+CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(restaurant_id, phone);
+CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(restaurant_id, email);
 CREATE INDEX IF NOT EXISTS idx_orders_rest ON orders(restaurant_id);
+CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id);
+CREATE INDEX IF NOT EXISTS idx_orders_branch ON orders(branch_id);
+CREATE INDEX IF NOT EXISTS idx_branches_rest ON branches(restaurant_id);
+CREATE INDEX IF NOT EXISTS idx_zones_branch ON delivery_zones(branch_id);
+CREATE INDEX IF NOT EXISTS idx_tiers_branch ON delivery_distance_tiers(branch_id);
 CREATE INDEX IF NOT EXISTS idx_custom_domains ON custom_domains(domain);
+

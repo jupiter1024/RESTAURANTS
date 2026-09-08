@@ -12,10 +12,16 @@ import type {
   InteractiveCategory,
   RestaurantBranding,
   CustomerOrder,
+  CustomerProfile,
+  CustomerAuthResponse,
 } from '../db/types';
 
 const TOKEN_KEY = 'bistroflow_token';
 const SESSION_KEY = 'bistroflow_simple_user'; // kept for compatibility
+
+// ── Customer session keys (separate from admin session) ──
+export const CUSTOMER_TOKEN_KEY = 'bistroflow_customer_token';
+export const CUSTOMER_SESSION_KEY = 'bistroflow_customer_session';
 
 // ──────────────────────────────────────────────────────────────
 // Base fetch helper
@@ -235,19 +241,92 @@ export async function apiUpdateBranding(
 }
 
 // ──────────────────────────────────────────────────────────────
+// Branches & Delivery
+// ──────────────────────────────────────────────────────────────
+export async function apiSaveBranch(
+  _restaurantId: string,
+  branchData: {
+    id?: string;
+    name: string;
+    address?: string;
+    phone?: string;
+    latitude: number;
+    longitude: number;
+    deliveryMode?: 'radius' | 'zone';
+    maxDeliveryRadiusKm?: number;
+    baseDeliveryFee?: number;
+    baseDeliveryDistanceKm?: number;
+    extraFeePerKm?: number;
+    isActive?: boolean;
+    zones?: Array<{ id?: string; zoneName: string; fee: number; estimatedTimeMin?: number }>;
+    tiers?: Array<{ id?: string; minKm: number; maxKm: number; fee: number }>;
+  }
+): Promise<{ success: boolean; branchId: string }> {
+  return apiFetch<{ success: boolean; branchId: string }>('/admin/branches', {
+    method: 'POST',
+    body: JSON.stringify(branchData),
+  });
+}
+
+export async function apiDeleteBranch(_restaurantId: string, branchId: string): Promise<void> {
+  await apiFetch(`/admin/branches/${branchId}`, { method: 'DELETE' });
+}
+
+export async function apiCalculateDeliveryFee(params: {
+  restaurantId: string;
+  customerLat?: number;
+  customerLng?: number;
+  zoneId?: string;
+  branchId?: string;
+}): Promise<{
+  covered: boolean;
+  branchId?: string;
+  branchName?: string;
+  distanceKm?: number;
+  deliveryFee: number;
+  deliveryZoneName?: string;
+  estimatedTimeMin?: number;
+  message?: string;
+}> {
+  return apiFetch('/public/delivery/calculate', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+// ──────────────────────────────────────────────────────────────
 // Orders
 // ──────────────────────────────────────────────────────────────
 export async function apiCreateOrder(
   restaurantId: string,
   orderData: Omit<CustomerOrder, 'id' | 'createdAt' | 'status'>
 ): Promise<CustomerOrder> {
-  const data = await apiFetch<{ orderId: string; status: string; total: number; items: unknown[] }>('/public/orders', {
+  // Prefer the customer JWT so the backend can link the order to the account
+  const customerToken = localStorage.getItem(CUSTOMER_TOKEN_KEY);
+  const adminToken = localStorage.getItem(TOKEN_KEY);
+  const authToken = customerToken || adminToken;
+
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+  const res = await fetch('/api/public/orders', {
     method: 'POST',
+    headers,
     body: JSON.stringify({ restaurantId, ...orderData }),
   });
+
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try { const b = await res.json() as { error?: string }; msg = b.error || msg; } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+
+  const data = await res.json() as { orderId: string; status: string; total: number; deliveryFee?: number; items: unknown[] };
+
   return {
     ...orderData,
     id: data.orderId,
+    deliveryFee: data.deliveryFee ?? orderData.deliveryFee,
     total: data.total ?? orderData.total,
     status: 'pending',
     createdAt: new Date().toISOString(),
@@ -269,6 +348,129 @@ export async function apiGetOrders(_restaurantId: string): Promise<CustomerOrder
   try {
     const data = await apiFetch<{ restaurant: SimpleRestaurant }>('/admin/restaurant');
     return data.restaurant?.orders || [];
+  } catch {
+    return [];
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
+// CUSTOMER AUTH (public – no admin JWT needed)
+// ──────────────────────────────────────────────────────────────
+
+/** Shared fetch that attaches the *customer* JWT, not the admin JWT. */
+async function customerFetch<T = unknown>(
+  path: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const token = localStorage.getItem(CUSTOMER_TOKEN_KEY);
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(options.headers as Record<string, string> || {}),
+  };
+
+  const res = await fetch(`/api/public${path}`, { ...options, headers });
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try {
+      const body = await res.json() as { error?: string };
+      msg = body.error || msg;
+    } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+  return res.json() as Promise<T>;
+}
+
+export function apiCustomerGetSession(): CustomerProfile | null {
+  const s = localStorage.getItem(CUSTOMER_SESSION_KEY);
+  const token = localStorage.getItem(CUSTOMER_TOKEN_KEY);
+  if (!s || !token) return null;
+  try { return JSON.parse(s) as CustomerProfile; } catch { return null; }
+}
+
+export function apiCustomerGetToken(): string | null {
+  return localStorage.getItem(CUSTOMER_TOKEN_KEY);
+}
+
+export async function apiCustomerRegister(data: {
+  restaurantId: string;
+  name: string;
+  phone: string;
+  email?: string;
+  password: string;
+  defaultAddress?: string;
+  defaultLat?: number;
+  defaultLng?: number;
+}): Promise<CustomerAuthResponse> {
+  const res = await customerFetch<CustomerAuthResponse>('/customer/register', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  localStorage.setItem(CUSTOMER_TOKEN_KEY, res.token);
+  localStorage.setItem(CUSTOMER_SESSION_KEY, JSON.stringify(res.customer));
+  return res;
+}
+
+export async function apiCustomerLogin(
+  restaurantId: string,
+  identifier: string,
+  password: string
+): Promise<CustomerAuthResponse> {
+  const res = await customerFetch<CustomerAuthResponse>('/customer/login', {
+    method: 'POST',
+    body: JSON.stringify({ restaurantId, identifier, password }),
+  });
+  localStorage.setItem(CUSTOMER_TOKEN_KEY, res.token);
+  localStorage.setItem(CUSTOMER_SESSION_KEY, JSON.stringify(res.customer));
+  return res;
+}
+
+export function apiCustomerLogout(): void {
+  localStorage.removeItem(CUSTOMER_TOKEN_KEY);
+  localStorage.removeItem(CUSTOMER_SESSION_KEY);
+}
+
+export async function apiCustomerGetProfile(): Promise<CustomerProfile | null> {
+  try {
+    const res = await customerFetch<{ customer: CustomerProfile }>('/customer/me');
+    if (res.customer) {
+      localStorage.setItem(CUSTOMER_SESSION_KEY, JSON.stringify(res.customer));
+    }
+    return res.customer || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function apiCustomerUpdateProfile(profileData: {
+  name?: string;
+  defaultAddress?: string;
+  defaultLat?: number;
+  defaultLng?: number;
+}): Promise<void> {
+  await customerFetch('/customer/profile', {
+    method: 'POST',
+    body: JSON.stringify(profileData),
+  });
+  // Update cached session
+  const cached = apiCustomerGetSession();
+  if (cached) {
+    const updated = { ...cached, ...profileData };
+    localStorage.setItem(CUSTOMER_SESSION_KEY, JSON.stringify(updated));
+  }
+}
+
+export async function apiCustomerGetOrders(
+  restaurantId: string,
+  phone?: string
+): Promise<CustomerOrder[]> {
+  try {
+    const token = localStorage.getItem(CUSTOMER_TOKEN_KEY);
+    const qs = token
+      ? `?restaurantId=${encodeURIComponent(restaurantId)}`
+      : `?restaurantId=${encodeURIComponent(restaurantId)}${phone ? `&phone=${encodeURIComponent(phone)}` : ''}`;
+    const res = await customerFetch<{ orders: CustomerOrder[] }>(`/customer/orders${qs}`);
+    return res.orders || [];
   } catch {
     return [];
   }
